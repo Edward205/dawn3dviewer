@@ -1,12 +1,11 @@
-#include <cmath>
-#include <cstdint>
 #include <iostream>
 
 #include <GLFW/glfw3.h>
 #include <dawn/webgpu_cpp_print.h>
-#include <unistd.h>
 #include <webgpu/webgpu_cpp.h>
 #include <webgpu/webgpu_glfw.h>
+
+#include "FileLoader.h"
 
 const uint32_t kWidth = 512;
 const uint32_t kHeight = 512;
@@ -33,8 +32,11 @@ const char shaderCode[] = R"(
     };
 
     @vertex fn vs_main(in: VertexInput) -> VertexOutput {
+        let ratio = 512.0 / 512.0; // The width and height of the target surface
+        let offset = vec2f(-0.6875, -0.463); // The offset that we want to apply to the position
+        
         var out: VertexOutput; // create the output struct
-        out.position = vec4f(in.position, 0.0, 1.0);
+        out.position = vec4f(in.position.x + offset.x, (in.position.y + offset.y) * ratio, 0.0, 1.0);
         out.color = in.color;
         return out;
     }
@@ -74,7 +76,7 @@ void Init() {
   wgpu::Limits requiredLimits;
   requiredLimits.maxVertexAttributes = 8;
   requiredLimits.maxVertexBuffers = 4;
-  requiredLimits.maxBufferSize = 6 * 2 * sizeof(float);
+  requiredLimits.maxBufferSize = 128 * 5 * sizeof(float);
   requiredLimits.maxVertexBufferArrayStride = 5 * sizeof(float);
   requiredLimits.maxTextureDimension1D = WGPU_LIMIT_U32_UNDEFINED;
   requiredLimits.maxTextureDimension2D = WGPU_LIMIT_U32_UNDEFINED;
@@ -118,17 +120,16 @@ uint32_t indexCount;
 void CreateRenderPipeline() {
   // load a model
 
-  std::vector<float> pointData = {// x,   y,     r,   g,   b
-                                  -0.5, -0.5, 1.0,  0.0,  0.0,  +0.5, -0.5,
-                                  0.0,  1.0,  0.0,  +0.5, +0.5, 0.0,  0.0,
-                                  1.0,  -0.5, +0.5, 1.0,  1.0,  0.0};
+  std::vector<float> pointData ;
+  std::vector<uint16_t> indexData;
 
-  // Define index data
-  // This is a list of indices referencing positions in the pointData
-  std::vector<uint16_t> indexData = {
-      0, 1, 2, // Triangle #0 connects points #0, #1 and #2
-      0, 2, 3  // Triangle #1 connects points #0, #2 and #3
-  };
+  bool success = loadGeometry("res/webgpu.txt", pointData, indexData);
+
+  if(!success)
+  {
+    std::cerr << "Could not load geometry!" << std::endl;
+    exit(1);
+  }
 
   indexCount = static_cast<uint32_t>(indexData.size());
 
