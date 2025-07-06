@@ -75,7 +75,7 @@ void Init() {
   requiredLimits.maxVertexAttributes = 8;
   requiredLimits.maxVertexBuffers = 4;
   requiredLimits.maxBufferSize = 6 * 2 * sizeof(float);
-  requiredLimits.maxVertexBufferArrayStride = 2 * sizeof(float);
+  requiredLimits.maxVertexBufferArrayStride = 5 * sizeof(float);
   requiredLimits.maxTextureDimension1D = WGPU_LIMIT_U32_UNDEFINED;
   requiredLimits.maxTextureDimension2D = WGPU_LIMIT_U32_UNDEFINED;
   requiredLimits.maxTextureDimension3D = WGPU_LIMIT_U32_UNDEFINED;
@@ -112,48 +112,59 @@ void ConfigureSurface() {
   surface.Configure(&config);
 }
 
-wgpu::Buffer vertexBuffer;
-wgpu::Buffer colorBuffer;
-uint32_t vertexCount;
+wgpu::Buffer pointBuffer;
+wgpu::Buffer indexBuffer;
+uint32_t indexCount;
 void CreateRenderPipeline() {
   // load a model
-  std::vector<float> vertexData = {
-      -0.5, -0.5,
-      +0.5, -0.5,
-      +0.0, +0.5,
-      -0.55f, -0.5,
-      -0.05f, +0.5,
-      -0.55f, +0.5
+
+  std::vector<float> pointData = {// x,   y,     r,   g,   b
+                                  -0.5, -0.5, 1.0,  0.0,  0.0,  +0.5, -0.5,
+                                  0.0,  1.0,  0.0,  +0.5, +0.5, 0.0,  0.0,
+                                  1.0,  -0.5, +0.5, 1.0,  1.0,  0.0};
+
+  // Define index data
+  // This is a list of indices referencing positions in the pointData
+  std::vector<uint16_t> indexData = {
+      0, 1, 2, // Triangle #0 connects points #0, #1 and #2
+      0, 2, 3  // Triangle #1 connects points #0, #2 and #3
   };
 
-  // r0,  g0,  b0, r1,  g1,  b1, ...
-  std::vector<float> colorData = {
-      1.0, 0.0, 0.0,
-      0.0, 1.0, 0.0,
-      0.0, 0.0, 1.0,
-      1.0, 1.0, 0.0,
-      1.0, 0.0, 1.0,
-      0.0, 1.0, 1.0
-  };
-  vertexCount = static_cast<uint32_t>(vertexData.size() / 2);
+  indexCount = static_cast<uint32_t>(indexData.size());
 
-  wgpu::BufferDescriptor bufferDesc{.label = "model buffer", .usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Vertex, .size = vertexData.size() * sizeof(float), .mappedAtCreation = false};
-  vertexBuffer = device.CreateBuffer(&bufferDesc);
-  device.GetQueue().WriteBuffer(vertexBuffer, 0, vertexData.data(), bufferDesc.size);
+  // create point buffer
+  wgpu::BufferDescriptor bufferDesc{.usage = wgpu::BufferUsage::CopyDst |
+                                             wgpu::BufferUsage::Vertex,
+                                    .size = pointData.size() * sizeof(float),
+                                    .mappedAtCreation = false};
+                                   
+  pointBuffer = device.CreateBuffer(&bufferDesc);
+  device.GetQueue().WriteBuffer(pointBuffer, 0, pointData.data(), bufferDesc.size);
 
-  bufferDesc = {.label = "color buffer", .usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Vertex, .size = colorData.size() * sizeof(float), .mappedAtCreation = false};
-  colorBuffer = device.CreateBuffer(&bufferDesc);
-  device.GetQueue().WriteBuffer(colorBuffer, 0, colorData.data(), bufferDesc.size);
+  // create index buffer
+  bufferDesc = {.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Index, .size = indexData.size() * sizeof(uint16_t)};
+  // uint16_t is 2 bytes, we need to pad to a multiple of 4
+  bufferDesc.size = (bufferDesc.size + 3) & ~3;
+  indexData.resize((indexData.size() + 1) & ~1);
+  
+  indexBuffer = device.CreateBuffer(&bufferDesc);
+  device.GetQueue().WriteBuffer(indexBuffer, 0, indexData.data(), bufferDesc.size);
 
   // buffer layout
-  std::vector<wgpu::VertexBufferLayout> vertexBufferLayouts(2);
-  
-  wgpu::VertexAttribute positionAttrib{.format = wgpu::VertexFormat::Float32x2, .offset = 0, .shaderLocation = 0,};
-  vertexBufferLayouts[0] = {.stepMode = wgpu::VertexStepMode::Vertex, .arrayStride = 2 * sizeof(float),  .attributeCount = 1, .attributes = &positionAttrib};
+  std::vector<wgpu::VertexAttribute> vertexAttribs(2);
 
-  wgpu::VertexAttribute colorAttrib{.format = wgpu::VertexFormat::Float32x3, .offset = 0, .shaderLocation = 1,};
-  vertexBufferLayouts[1] = {.stepMode = wgpu::VertexStepMode::Vertex, .arrayStride = 3 * sizeof(float),  .attributeCount = 1, .attributes = &colorAttrib};
+  vertexAttribs[0] = {.format = wgpu::VertexFormat::Float32x2,
+                      .offset = 0,
+                      .shaderLocation = 0};
+  vertexAttribs[1] = {.format = wgpu::VertexFormat::Float32x3,
+                      .offset = 2 * sizeof(float),
+                      .shaderLocation = 1};
 
+  wgpu::VertexBufferLayout vertexBufferLayout = {
+      .stepMode = wgpu::VertexStepMode::Vertex,
+      .arrayStride = 5 * sizeof(float),
+      .attributeCount = vertexAttribs.size(),
+      .attributes = vertexAttribs.data()};
 
   wgpu::ShaderSourceWGSL wgsl{{.nextInChain = nullptr, .code = shaderCode}};
 
@@ -167,7 +178,9 @@ void CreateRenderPipeline() {
       .module = shaderModule, .targetCount = 1, .targets = &colorTargetState};
 
   wgpu::RenderPipelineDescriptor descriptor{
-      .vertex = {.module = shaderModule, .bufferCount = vertexBufferLayouts.size(), .buffers = vertexBufferLayouts.data()},
+      .vertex = {.module = shaderModule,
+                 .bufferCount = 1,
+                 .buffers = &vertexBufferLayout},
       .primitive = {.topology = wgpu::PrimitiveTopology::TriangleList},
       .fragment = &fragmentState,
   };
@@ -194,10 +207,12 @@ void Render() {
   wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
   wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderpass);
   pass.SetPipeline(pipeline);
-  
-  pass.SetVertexBuffer(0, vertexBuffer, 0, vertexBuffer.GetSize());
-  pass.SetVertexBuffer(1, colorBuffer, 0, colorBuffer.GetSize());
-  pass.Draw(vertexCount, 1, 0, 0);
+
+  pass.SetVertexBuffer(0, pointBuffer, 0, pointBuffer.GetSize());
+  pass.SetIndexBuffer(indexBuffer, wgpu::IndexFormat::Uint16, 0,
+                      indexBuffer.GetSize());
+
+  pass.DrawIndexed(indexCount);
 
   pass.End();
   wgpu::CommandBuffer commands = encoder.Finish();
