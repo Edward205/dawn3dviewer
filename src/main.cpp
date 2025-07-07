@@ -44,7 +44,7 @@ const char shaderCode[] = R"(
         out.color = in.color;
         return out;
     }
-    @fragment fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
+    @fragment fn fs_main(in: VertexOutput) -> @location(0) vec4f {
         return vec4f(in.color, 1.0);
     }
 )";
@@ -172,47 +172,45 @@ void CreateRenderPipeline() {
   uniformBuffer = device.CreateBuffer(&bufferDesc);
   device.GetQueue().WriteBuffer(uniformBuffer, 0, &currentTime, sizeof(float));
 
+  // --- pipeline layout---
 
-
-  // --- pipeline layout--- 
-  
   wgpu::BindGroupLayoutEntry bindingGroupEntry{
-    .binding = 0,
-    .buffer = {
-      .type = wgpu::BufferBindingType::Uniform,
-      .minBindingSize = sizeof(float),
-    },
-    .visibility = wgpu::ShaderStage::Vertex,
+      .binding = 0,
+      .visibility = wgpu::ShaderStage::Vertex,
+      .buffer =
+          {
+              .type = wgpu::BufferBindingType::Uniform,
+              .minBindingSize = 4 * sizeof(float),
+          },
   };
 
   wgpu::BindGroupLayoutDescriptor bindGroupLayoutDesc{
-    .entries = &bindingGroupEntry,
-    .entryCount = 1,
+      .entryCount = 1,
+      .entries = &bindingGroupEntry,
   };
-  wgpu::BindGroupLayout bindGroupLayout = device.CreateBindGroupLayout(&bindGroupLayoutDesc);
+  wgpu::BindGroupLayout bindGroupLayout =
+      device.CreateBindGroupLayout(&bindGroupLayoutDesc);
 
   wgpu::BindGroupEntry binding{
-    .binding = 0,
-    .buffer = uniformBuffer,
-    .offset = 0,
-    .size = 4 * sizeof(float),
+      .binding = 0,
+      .buffer = uniformBuffer,
+      .offset = 0,
+      .size = 4 * sizeof(float),
   };
   wgpu::BindGroupDescriptor bindGroupDesc{
-    .layout = bindGroupLayout,
-    .entries = &binding,
-    .entryCount = 1,
+      .layout = bindGroupLayout,
+      .entryCount = 1,
+      .entries = &binding,
   };
   bindGroup = device.CreateBindGroup(&bindGroupDesc);
 
   wgpu::PipelineLayoutDescriptor layoutDesc{
-    .bindGroupLayoutCount = 1,
-    .bindGroupLayouts = &bindGroupLayout,
+      .bindGroupLayoutCount = 1,
+      .bindGroupLayouts = &bindGroupLayout,
   };
   wgpu::PipelineLayout layout = device.CreatePipelineLayout(&layoutDesc);
+
   // --- end of pipeline layout ---
-
-
-
 
   // buffer layout
   std::vector<wgpu::VertexAttribute> vertexAttribs(2);
@@ -231,19 +229,25 @@ void CreateRenderPipeline() {
       .attributes = vertexAttribs.data()};
 
   wgpu::ShaderSourceWGSL wgsl{{.nextInChain = nullptr, .code = shaderCode}};
+  
+    wgpu::ShaderModuleWGSLDescriptor wgslDesc{};
+    wgslDesc.code = shaderCode;
 
-  wgpu::ShaderModuleDescriptor shaderModuleDescriptor{.nextInChain = &wgsl};
-  wgpu::ShaderModule shaderModule =
-      device.CreateShaderModule(&shaderModuleDescriptor);
+    wgpu::ShaderModuleDescriptor shaderModuleDescriptor{};
+    shaderModuleDescriptor.nextInChain = &wgslDesc;
+
+    wgpu::ShaderModule shaderModule =
+    device.CreateShaderModule(&shaderModuleDescriptor);
 
   wgpu::ColorTargetState colorTargetState{.format = format};
 
   wgpu::FragmentState fragmentState{
-      .module = shaderModule, .targetCount = 1, .targets = &colorTargetState};
+      .module = shaderModule, .entryPoint = "fs_main", .targetCount = 1, .targets = &colorTargetState};
 
   wgpu::RenderPipelineDescriptor descriptor{
       .layout = layout,
       .vertex = {.module = shaderModule,
+                 .entryPoint = "vs_main",
                  .bufferCount = 1,
                  .buffers = &vertexBufferLayout},
       .primitive = {.topology = wgpu::PrimitiveTopology::TriangleList},
