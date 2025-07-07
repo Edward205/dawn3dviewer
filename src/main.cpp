@@ -164,46 +164,55 @@ void CreateRenderPipeline() {
   device.GetQueue().WriteBuffer(indexBuffer, 0, indexData.data(),
                                 bufferDesc.size);
 
-  // --- create uniform buffer ---
-
+  // create uniform buffer
   // size due to alignment
   bufferDesc = {.usage =
                     wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
                 .size = 4 * sizeof(float)};
   uniformBuffer = device.CreateBuffer(&bufferDesc);
+  device.GetQueue().WriteBuffer(uniformBuffer, 0, &currentTime, sizeof(float));
 
-  // pipeline layout for uniforms (???)
-  wgpu::PipelineLayout layout;
-  wgpu::BindGroupLayout bindGroupLayout;
 
-  // create binding and group
-  wgpu::BindGroupEntry binding{.binding = 0,
-                               .buffer = uniformBuffer,
-                               .offset = 0,
-                               .size = 4 * sizeof(float)};
+
+  // --- pipeline layout--- 
+  
+  wgpu::BindGroupLayoutEntry bindingGroupEntry{
+    .binding = 0,
+    .buffer = {
+      .type = wgpu::BufferBindingType::Uniform,
+      .minBindingSize = sizeof(float),
+    },
+    .visibility = wgpu::ShaderStage::Vertex,
+  };
+
+  wgpu::BindGroupLayoutDescriptor bindGroupLayoutDesc{
+    .entries = &bindingGroupEntry,
+    .entryCount = 1,
+  };
+  wgpu::BindGroupLayout bindGroupLayout = device.CreateBindGroupLayout(&bindGroupLayoutDesc);
+
+  wgpu::BindGroupEntry binding{
+    .binding = 0,
+    .buffer = uniformBuffer,
+    .offset = 0,
+    .size = 4 * sizeof(float),
+  };
   wgpu::BindGroupDescriptor bindGroupDesc{
-      .layout = bindGroupLayout, .entryCount = 1, .entries = &binding};
+    .layout = bindGroupLayout,
+    .entries = &binding,
+    .entryCount = 1,
+  };
   bindGroup = device.CreateBindGroup(&bindGroupDesc);
 
-  wgpu::BindGroupLayoutEntry bindingLayout{
-      .binding = 0,
-      .visibility = wgpu::ShaderStage::Vertex,
-      .buffer =
-          {
-              .type = wgpu::BufferBindingType::Uniform,
-              .minBindingSize = 4 * sizeof(float),
-          },
-  };
-  // bind group layout
-  wgpu::BindGroupLayoutDescriptor bindGroupLayoutDesc{
-      .entryCount = 1, .entries = &bindingLayout};
-  bindGroupLayout = device.CreateBindGroupLayout(&bindGroupLayoutDesc);
-
   wgpu::PipelineLayoutDescriptor layoutDesc{
-      .bindGroupLayoutCount = 1, .bindGroupLayouts = &bindGroupLayout};
-  layout = device.CreatePipelineLayout(&layoutDesc);
+    .bindGroupLayoutCount = 1,
+    .bindGroupLayouts = &bindGroupLayout,
+  };
+  wgpu::PipelineLayout layout = device.CreatePipelineLayout(&layoutDesc);
+  // --- end of pipeline layout ---
 
-  // --- end of pipeline layout madness ---
+
+
 
   // buffer layout
   std::vector<wgpu::VertexAttribute> vertexAttribs(2);
