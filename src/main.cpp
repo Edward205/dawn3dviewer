@@ -1,4 +1,3 @@
-#include <cmath>
 #include <iostream>
 
 #include <GLFW/glfw3.h>
@@ -43,7 +42,7 @@ const char shaderCode[] = R"(
         out.color = in.color;
         return out;
     }
-    @fragment fn fs_main(in: VertexOutput) -> @location(0) vec4f {
+    @fragment fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
         return vec4f(in.color, 1.0);
     }
 )";
@@ -86,10 +85,6 @@ void Init() {
   requiredLimits.maxTextureDimension3D = WGPU_LIMIT_U32_UNDEFINED;
   requiredLimits.maxInterStageShaderVariables = 3;
 
-  requiredLimits.maxBindGroups = 1;
-  requiredLimits.maxUniformBuffersPerShaderStage = 1;
-  requiredLimits.maxUniformBufferBindingSize = 16 * 4;
-
   desc.requiredLimits = &requiredLimits;
 
   // Get device
@@ -123,8 +118,6 @@ void ConfigureSurface() {
 
 wgpu::Buffer pointBuffer;
 wgpu::Buffer indexBuffer;
-wgpu::Buffer uniformBuffer;
-wgpu::BindGroup bindGroup;
 uint32_t indexCount;
 wgpu::BindGroup bindGroup;
 wgpu::Buffer uniformBuffer;
@@ -239,25 +232,18 @@ void CreateRenderPipeline() {
   // END PIPELINE LAYOUT
   
   wgpu::ShaderSourceWGSL wgsl{{.nextInChain = nullptr, .code = shaderCode}};
-  
-    wgpu::ShaderModuleWGSLDescriptor wgslDesc{};
-    wgslDesc.code = shaderCode;
 
-    wgpu::ShaderModuleDescriptor shaderModuleDescriptor{};
-    shaderModuleDescriptor.nextInChain = &wgslDesc;
-
-    wgpu::ShaderModule shaderModule =
-    device.CreateShaderModule(&shaderModuleDescriptor);
+  wgpu::ShaderModuleDescriptor shaderModuleDescriptor{.nextInChain = &wgsl};
+  wgpu::ShaderModule shaderModule =
+      device.CreateShaderModule(&shaderModuleDescriptor);
 
   wgpu::ColorTargetState colorTargetState{.format = format};
 
   wgpu::FragmentState fragmentState{
-      .module = shaderModule, .entryPoint = "fs_main", .targetCount = 1, .targets = &colorTargetState};
+      .module = shaderModule, .targetCount = 1, .targets = &colorTargetState};
 
   wgpu::RenderPipelineDescriptor descriptor{
-      .layout = layout,
       .vertex = {.module = shaderModule,
-                 .entryPoint = "vs_main",
                  .bufferCount = 1,
                  .buffers = &vertexBufferLayout},
       .primitive = {.topology = wgpu::PrimitiveTopology::TriangleList},
