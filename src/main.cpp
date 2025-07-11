@@ -23,7 +23,7 @@ wgpu::RenderPipeline pipeline;
 const char shaderCode[] = R"(
     @group(0) @binding(0) var<uniform> uTime: f32;
     struct VertexInput {
-        @location(0) position: vec2f,
+        @location(0) position: vec3f,
         @location(1) color: vec3f,
     };
     struct VertexOutput {
@@ -32,13 +32,23 @@ const char shaderCode[] = R"(
     };
 
     @vertex fn vs_main(in: VertexInput) -> VertexOutput {
-        let ratio = 512.0 / 512.0; // The width and height of the target surface
-        
-        var offset = vec2f(-0.6875, -0.463); // The offset that we want to apply to the position
-        offset += 0.3 * vec2f(cos(uTime), sin(uTime));
+        var out: VertexOutput;
+        let ratio = 512.0 / 512.0;
+        var offset = vec2f(0.0);
 
-        var out: VertexOutput; // create the output struct
-        out.position = vec4f(in.position.x + offset.x, (in.position.y + offset.y) * ratio, 0.0, 1.0);
+        let angle = uTime; // you can multiply it go rotate faster
+
+        // Rotate the position around the X axis by "mixing" a bit of Y and Z in
+        // the original Y and Z.
+        let alpha = cos(angle);
+        let beta = sin(angle);
+        var position = vec3f(
+          in.position.x,
+          alpha * in.position.y + beta * in.position.z,
+          alpha * in.position.z - beta * in.position.y,
+        );
+        out.position = vec4f(position.x, position.y * ratio, position.z * 0.5 + 0.5, 1.0);
+        
         out.color = in.color;
         return out;
     }
@@ -84,6 +94,7 @@ void Init() {
   requiredLimits.maxTextureDimension2D = WGPU_LIMIT_U32_UNDEFINED;
   requiredLimits.maxTextureDimension3D = WGPU_LIMIT_U32_UNDEFINED;
   requiredLimits.maxInterStageShaderVariables = 3;
+  requiredLimits.maxVertexBufferArrayStride = 6 * sizeof(float);
 
   desc.requiredLimits = &requiredLimits;
 
@@ -121,7 +132,8 @@ wgpu::Buffer indexBuffer;
 uint32_t indexCount;
 wgpu::BindGroup bindGroup;
 wgpu::Buffer uniformBuffer;
-
+wgpu::Texture depthTexture;
+wgpu::TextureView depthTextureView;
 float currentTime = 1.0f;
 void CreateRenderPipeline() {
   // load a model
@@ -129,7 +141,7 @@ void CreateRenderPipeline() {
   std::vector<float> pointData;
   std::vector<uint16_t> indexData;
 
-  bool success = loadGeometry("res/webgpu.txt", pointData, indexData);
+  bool success = loadGeometry("res/webgpu.txt", pointData, indexData, 3);
 
   if (!success) {
     std::cerr << "Could not load geometry!" << std::endl;
@@ -162,16 +174,16 @@ void CreateRenderPipeline() {
   // buffer layout
   std::vector<wgpu::VertexAttribute> vertexAttribs(2);
 
-  vertexAttribs[0] = {.format = wgpu::VertexFormat::Float32x2,
+  vertexAttribs[0] = {.format = wgpu::VertexFormat::Float32x3,
                       .offset = 0,
                       .shaderLocation = 0};
   vertexAttribs[1] = {.format = wgpu::VertexFormat::Float32x3,
-                      .offset = 2 * sizeof(float),
+                      .offset = 3 * sizeof(float),
                       .shaderLocation = 1};
 
   wgpu::VertexBufferLayout vertexBufferLayout = {
       .stepMode = wgpu::VertexStepMode::Vertex,
-      .arrayStride = 5 * sizeof(float),
+      .arrayStride = 6 * sizeof(float),
       .attributeCount = vertexAttribs.size(),
       .attributes = vertexAttribs.data()};
 
@@ -228,9 +240,43 @@ void CreateRenderPipeline() {
   };
   layout = device.CreatePipelineLayout(&layoutDesc);
   
-
   // END PIPELINE LAYOUT
-  
+ 
+  // z buffer
+  // configure depth stencil
+  wgpu::TextureFormat depthTextureFormat = wgpu::TextureFormat::Depth24Plus;
+  wgpu::DepthStencilState depthStencilState{
+    .depthCompare = wgpu::CompareFunction::Less,
+    .depthWriteEnabled = true,
+    .format = depthTextureFormat,
+    .stencilReadMask = 0,
+    .stencilWriteMask = 0,
+  };
+
+  // depth texture
+  wgpu::TextureDescriptor depthTextureDesc{
+    .dimension = wgpu::TextureDimension::e2D,
+    .format = depthTextureFormat,
+    .mipLevelCount = 1,
+    .sampleCount = 1,
+    .size = {512, 512, 1},
+    .usage = wgpu::TextureUsage::RenderAttachment,
+    .viewFormatCount = 1,
+    .viewFormats = &depthTextureFormat,
+  };
+  depthTexture = device.CreateTexture(&depthTextureDesc);
+  // Create the view of the depth texture manipulated by the rasterizer
+  wgpu::TextureViewDescriptor depthTextureViewDesc{
+    .aspect = wgpu::TextureAspect::DepthOnly,
+    .baseArrayLayer = 0,
+    .arrayLayerCount = 1,
+    .baseMipLevel = 0,
+    .mipLevelCount = 1,
+    .dimension = wgpu::TextureViewDimension::e2D,
+    .format = depthTextureFormat,
+  };
+  depthTextureView = depthTexture.CreateView(&depthTextureViewDesc);
+
   wgpu::ShaderSourceWGSL wgsl{{.nextInChain = nullptr, .code = shaderCode}};
 
   wgpu::ShaderModuleDescriptor shaderModuleDescriptor{.nextInChain = &wgsl};
@@ -249,6 +295,7 @@ void CreateRenderPipeline() {
       .primitive = {.topology = wgpu::PrimitiveTopology::TriangleList},
       .fragment = &fragmentState,
       .layout = layout,
+      .depthStencil = &depthStencilState,
   };
   pipeline = device.CreateRenderPipeline(&descriptor);
 }
@@ -269,9 +316,21 @@ void Render() {
       .view = surfaceTexture.texture.CreateView(),
       .loadOp = wgpu::LoadOp::Clear,
       .storeOp = wgpu::StoreOp::Store};
+  wgpu::RenderPassDepthStencilAttachment depthStencilAttachment = {
+    .view = depthTextureView,
+    .depthClearValue = 1.0f,
+    .depthLoadOp = wgpu::LoadOp::Clear,
+    .depthStoreOp = wgpu::StoreOp::Store,
+    .depthReadOnly = false,
+    .stencilClearValue = 0,
+    .stencilStoreOp = wgpu::StoreOp::Undefined,
+    .stencilLoadOp = wgpu::LoadOp::Undefined,
+    .stencilReadOnly = true,
+  };
 
   wgpu::RenderPassDescriptor renderpass{.colorAttachmentCount = 1,
-                                        .colorAttachments = &attachment};
+                                        .colorAttachments = &attachment,
+                                      .depthStencilAttachment = &depthStencilAttachment};
 
   wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
   wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderpass);
