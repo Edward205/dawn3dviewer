@@ -21,7 +21,7 @@ wgpu::TextureFormat format;
 wgpu::RenderPipeline pipeline;
 
 const char shaderCode[] = R"(
-
+    @group(0) @binding(0) var<uniform> uTime: f32;
     struct VertexInput {
         @location(0) position: vec2f,
         @location(1) color: vec3f,
@@ -33,8 +33,10 @@ const char shaderCode[] = R"(
 
     @vertex fn vs_main(in: VertexInput) -> VertexOutput {
         let ratio = 512.0 / 512.0; // The width and height of the target surface
-        let offset = vec2f(-0.6875, -0.463); // The offset that we want to apply to the position
         
+        var offset = vec2f(-0.6875, -0.463); // The offset that we want to apply to the position
+        offset += 0.3 * vec2f(cos(uTime), sin(uTime));
+
         var out: VertexOutput; // create the output struct
         out.position = vec4f(in.position.x + offset.x, (in.position.y + offset.y) * ratio, 0.0, 1.0);
         out.color = in.color;
@@ -117,16 +119,19 @@ void ConfigureSurface() {
 wgpu::Buffer pointBuffer;
 wgpu::Buffer indexBuffer;
 uint32_t indexCount;
+wgpu::BindGroup bindGroup;
+wgpu::Buffer uniformBuffer;
+
+float currentTime = 1.0f;
 void CreateRenderPipeline() {
   // load a model
 
-  std::vector<float> pointData ;
+  std::vector<float> pointData;
   std::vector<uint16_t> indexData;
 
   bool success = loadGeometry("res/webgpu.txt", pointData, indexData);
 
-  if(!success)
-  {
+  if (!success) {
     std::cerr << "Could not load geometry!" << std::endl;
     exit(1);
   }
@@ -138,18 +143,21 @@ void CreateRenderPipeline() {
                                              wgpu::BufferUsage::Vertex,
                                     .size = pointData.size() * sizeof(float),
                                     .mappedAtCreation = false};
-                                   
+
   pointBuffer = device.CreateBuffer(&bufferDesc);
-  device.GetQueue().WriteBuffer(pointBuffer, 0, pointData.data(), bufferDesc.size);
+  device.GetQueue().WriteBuffer(pointBuffer, 0, pointData.data(),
+                                bufferDesc.size);
 
   // create index buffer
-  bufferDesc = {.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Index, .size = indexData.size() * sizeof(uint16_t)};
+  bufferDesc = {.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Index,
+                .size = indexData.size() * sizeof(uint16_t)};
   // uint16_t is 2 bytes, we need to pad to a multiple of 4
   bufferDesc.size = (bufferDesc.size + 3) & ~3;
   indexData.resize((indexData.size() + 1) & ~1);
-  
+
   indexBuffer = device.CreateBuffer(&bufferDesc);
-  device.GetQueue().WriteBuffer(indexBuffer, 0, indexData.data(), bufferDesc.size);
+  device.GetQueue().WriteBuffer(indexBuffer, 0, indexData.data(),
+                                bufferDesc.size);
 
   // buffer layout
   std::vector<wgpu::VertexAttribute> vertexAttribs(2);
@@ -167,6 +175,62 @@ void CreateRenderPipeline() {
       .attributeCount = vertexAttribs.size(),
       .attributes = vertexAttribs.data()};
 
+  // PIPELINE LAYOUT
+  wgpu::PipelineLayout layout;
+
+  // uniform buffer
+  bufferDesc = {.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
+                .size = 4 * sizeof(float),
+                .mappedAtCreation = false};
+  uniformBuffer = device.CreateBuffer(&bufferDesc);
+  device.GetQueue().WriteBuffer(uniformBuffer, 0, &currentTime, sizeof(float));
+
+  // binding for the buffer
+  wgpu::BindGroupEntry binding{.nextInChain = nullptr,
+                               .binding = 0,
+                               .buffer = uniformBuffer,
+                               .offset = 0,
+                               .size = 4 * sizeof(float)};
+  
+  // binding layout for the binding
+  wgpu::BindGroupLayoutEntry bindingLayout{
+    .binding = 0,
+    .visibility = wgpu::ShaderStage::Vertex,
+    .buffer = {
+      .type = wgpu::BufferBindingType::Uniform,
+      .minBindingSize = 4 * sizeof(float),
+    }
+  };
+
+  // bind group layout
+  wgpu::BindGroupLayoutDescriptor bindGroupLayoutDesc{
+    .entries = &bindingLayout,
+    .entryCount = 1,
+    .nextInChain = nullptr,
+  };
+  wgpu::BindGroupLayout bindGroupLayout;
+  bindGroupLayout = device.CreateBindGroupLayout(&bindGroupLayoutDesc);
+
+  // bind group
+  wgpu::BindGroupDescriptor bindGroupDesc{
+    .layout = bindGroupLayout,
+    .entryCount = 1,
+    .entries = &binding,
+    .nextInChain = nullptr,
+  };
+  bindGroup = device.CreateBindGroup(&bindGroupDesc);
+
+  // layout
+  wgpu::PipelineLayoutDescriptor layoutDesc{
+    .bindGroupLayoutCount = 1,
+    .bindGroupLayouts = &bindGroupLayout,
+    .nextInChain = nullptr,
+  };
+  layout = device.CreatePipelineLayout(&layoutDesc);
+  
+
+  // END PIPELINE LAYOUT
+  
   wgpu::ShaderSourceWGSL wgsl{{.nextInChain = nullptr, .code = shaderCode}};
 
   wgpu::ShaderModuleDescriptor shaderModuleDescriptor{.nextInChain = &wgsl};
@@ -184,6 +248,7 @@ void CreateRenderPipeline() {
                  .buffers = &vertexBufferLayout},
       .primitive = {.topology = wgpu::PrimitiveTopology::TriangleList},
       .fragment = &fragmentState,
+      .layout = layout,
   };
   pipeline = device.CreateRenderPipeline(&descriptor);
 }
@@ -194,6 +259,9 @@ void InitGraphics() {
 }
 
 void Render() {
+  float t = static_cast<float>(glfwGetTime());
+  device.GetQueue().WriteBuffer(uniformBuffer, 0, &t, sizeof(float));
+
   wgpu::SurfaceTexture surfaceTexture;
   surface.GetCurrentTexture(&surfaceTexture);
 
@@ -212,6 +280,7 @@ void Render() {
   pass.SetVertexBuffer(0, pointBuffer, 0, pointBuffer.GetSize());
   pass.SetIndexBuffer(indexBuffer, wgpu::IndexFormat::Uint16, 0,
                       indexBuffer.GetSize());
+  pass.SetBindGroup(0, bindGroup);
 
   pass.DrawIndexed(indexCount);
 
