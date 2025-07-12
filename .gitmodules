@@ -2,3 +2,6 @@
 	path = dawn
 	url = https://dawn.googlesource.com/dawn
 	branch = chromium/7204
+[submodule "glm"]
+	path = glm
+	url = https://github.com/g-truc/glm.git
