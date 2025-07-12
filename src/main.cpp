@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <iostream>
 
 #include <GLFW/glfw3.h>
@@ -5,7 +6,14 @@
 #include <webgpu/webgpu_cpp.h>
 #include <webgpu/webgpu_glfw.h>
 
+#include <glm/mat4x4.hpp>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 #include "FileLoader.h"
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/trigonometric.hpp"
 
 const uint32_t kWidth = 512;
 const uint32_t kHeight = 512;
@@ -21,7 +29,13 @@ wgpu::TextureFormat format;
 wgpu::RenderPipeline pipeline;
 
 const char shaderCode[] = R"(
-    @group(0) @binding(0) var<uniform> uTime: f32;
+    struct StdUniforms {
+      model: mat4x4<f32>,
+      view: mat4x4<f32>,
+      projection: mat4x4<f32>,
+      time: f32,
+    }
+    @group(0) @binding(0) var<uniform> uStdUniforms: StdUniforms;
     struct VertexInput {
         @location(0) position: vec3f,
         @location(1) color: vec3f,
@@ -36,7 +50,7 @@ const char shaderCode[] = R"(
         let ratio = 512.0 / 512.0;
         var offset = vec2f(0.0);
 
-        let angle = uTime; // you can multiply it go rotate faster
+        let angle = uStdUniforms.time; // you can multiply it go rotate faster
 
         // Rotate the position around the X axis by "mixing" a bit of Y and Z in
         // the original Y and Z.
@@ -47,15 +61,24 @@ const char shaderCode[] = R"(
           alpha * in.position.y + beta * in.position.z,
           alpha * in.position.z - beta * in.position.y,
         );
-        out.position = vec4f(position.x, position.y * ratio, position.z * 0.5 + 0.5, 1.0);
-        
+        //out.position = vec4f(position.x, position.y * ratio, position.z * 0.5 + 0.5, 1.0);
+
+        out.position = uStdUniforms.projection * uStdUniforms.view * uStdUniforms.model * vec4f(in.position, 1.0);
+
         out.color = in.color;
         return out;
     }
-    @fragment fn fragmentMain(in: VertexOutput) -> @location(0) vec4f {
+    @fragment fn fs_main(in: VertexOutput) -> @location(0) vec4f {
         return vec4f(in.color, 1.0);
     }
 )";
+struct StdUniforms {
+  glm::mat4 model;
+  glm::mat4 view;
+  glm::mat4 projection;
+  float time;
+  float _pad[3];
+};
 
 void Init() {
   // Get WebGPU instance
@@ -193,17 +216,25 @@ void CreateRenderPipeline() {
   // uniform buffer
   bufferDesc = {.usage =
                     wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
-                .size = 4 * sizeof(float),
+                .size = sizeof(StdUniforms),
                 .mappedAtCreation = false};
   uniformBuffer = device.CreateBuffer(&bufferDesc);
-  device.GetQueue().WriteBuffer(uniformBuffer, 0, &currentTime, sizeof(float));
+
+  StdUniforms uniforms{
+    .model = glm::rotate(glm::mat4(1.0f), glm::radians(-55.0f), glm::vec3(1.0f, 0.0f, 0.0f)),
+    .view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -3.0f)),
+    .projection = glm::perspective(glm::radians(45.0f), (float)kWidth / kHeight, 0.1f, 100.0f),
+    .time = 0.0f,
+    ._pad = {0, 0, 0},
+  };
+  device.GetQueue().WriteBuffer(uniformBuffer, 0, &uniforms, sizeof(StdUniforms));
 
   // binding for the buffer
   wgpu::BindGroupEntry binding{.nextInChain = nullptr,
                                .binding = 0,
                                .buffer = uniformBuffer,
                                .offset = 0,
-                               .size = 4 * sizeof(float)};
+                               .size = sizeof(StdUniforms)};
 
   // binding layout for the binding
   wgpu::BindGroupLayoutEntry bindingLayout{
@@ -211,7 +242,7 @@ void CreateRenderPipeline() {
       .visibility = wgpu::ShaderStage::Vertex,
       .buffer = {
           .type = wgpu::BufferBindingType::Uniform,
-          .minBindingSize = 4 * sizeof(float),
+          .minBindingSize = sizeof(StdUniforms),
       }};
 
   // bind group layout
@@ -286,13 +317,15 @@ void CreateRenderPipeline() {
   wgpu::ColorTargetState colorTargetState{.format = format};
 
   wgpu::FragmentState fragmentState{
-      .module = shaderModule, .targetCount = 1, .targets = &colorTargetState};
+      .module = shaderModule, .entryPoint = "fs_main", .targetCount = 1, .targets = &colorTargetState,};
 
   wgpu::RenderPipelineDescriptor descriptor{
       .layout = layout,
       .vertex = {.module = shaderModule,
+                 .entryPoint = "vs_main",
                  .bufferCount = 1,
-                 .buffers = &vertexBufferLayout},
+                 .buffers = &vertexBufferLayout,
+              },
       .primitive = {.topology = wgpu::PrimitiveTopology::TriangleList},
       .depthStencil = &depthStencilState,
       .fragment = &fragmentState,
@@ -307,7 +340,11 @@ void InitGraphics() {
 
 void Render() {
   float t = static_cast<float>(glfwGetTime());
-  device.GetQueue().WriteBuffer(uniformBuffer, 0, &t, sizeof(float));
+  device.GetQueue().WriteBuffer(uniformBuffer, offsetof(StdUniforms, time), &t, sizeof(float));
+  glm::mat4 model = glm::rotate(glm::mat4(1.0f), t, glm::vec3(0.0f, 1.0f, 0.0f));
+  model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+  device.GetQueue().WriteBuffer(uniformBuffer, offsetof(StdUniforms, model), &model, sizeof(glm::mat4));
+
 
   wgpu::SurfaceTexture surfaceTexture;
   surface.GetCurrentTexture(&surfaceTexture);
