@@ -191,7 +191,8 @@ void CreateRenderPipeline() {
   wgpu::PipelineLayout layout;
 
   // uniform buffer
-  bufferDesc = {.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
+  bufferDesc = {.usage =
+                    wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
                 .size = 4 * sizeof(float),
                 .mappedAtCreation = false};
   uniformBuffer = device.CreateBuffer(&bufferDesc);
@@ -203,77 +204,76 @@ void CreateRenderPipeline() {
                                .buffer = uniformBuffer,
                                .offset = 0,
                                .size = 4 * sizeof(float)};
-  
+
   // binding layout for the binding
   wgpu::BindGroupLayoutEntry bindingLayout{
-    .binding = 0,
-    .visibility = wgpu::ShaderStage::Vertex,
-    .buffer = {
-      .type = wgpu::BufferBindingType::Uniform,
-      .minBindingSize = 4 * sizeof(float),
-    }
-  };
+      .binding = 0,
+      .visibility = wgpu::ShaderStage::Vertex,
+      .buffer = {
+          .type = wgpu::BufferBindingType::Uniform,
+          .minBindingSize = 4 * sizeof(float),
+      }};
 
   // bind group layout
   wgpu::BindGroupLayoutDescriptor bindGroupLayoutDesc{
-    .entries = &bindingLayout,
-    .entryCount = 1,
-    .nextInChain = nullptr,
+      .nextInChain = nullptr,
+      .entryCount = 1,
+      .entries = &bindingLayout,
   };
   wgpu::BindGroupLayout bindGroupLayout;
   bindGroupLayout = device.CreateBindGroupLayout(&bindGroupLayoutDesc);
 
   // bind group
   wgpu::BindGroupDescriptor bindGroupDesc{
-    .layout = bindGroupLayout,
-    .entryCount = 1,
-    .entries = &binding,
-    .nextInChain = nullptr,
+      .nextInChain = nullptr,
+      .layout = bindGroupLayout,
+      .entryCount = 1,
+      .entries = &binding,
   };
   bindGroup = device.CreateBindGroup(&bindGroupDesc);
 
   // layout
   wgpu::PipelineLayoutDescriptor layoutDesc{
-    .bindGroupLayoutCount = 1,
-    .bindGroupLayouts = &bindGroupLayout,
-    .nextInChain = nullptr,
+      .nextInChain = nullptr,
+      .bindGroupLayoutCount = 1,
+      .bindGroupLayouts = &bindGroupLayout,
   };
   layout = device.CreatePipelineLayout(&layoutDesc);
-  
+
   // END PIPELINE LAYOUT
- 
+
   // z buffer
   // configure depth stencil
   wgpu::TextureFormat depthTextureFormat = wgpu::TextureFormat::Depth24Plus;
   wgpu::DepthStencilState depthStencilState{
-    .depthCompare = wgpu::CompareFunction::Less,
-    .depthWriteEnabled = true,
-    .format = depthTextureFormat,
-    .stencilReadMask = 0,
-    .stencilWriteMask = 0,
+      .format = depthTextureFormat,
+      .depthWriteEnabled = true,
+      .depthCompare = wgpu::CompareFunction::Less,
+      .stencilReadMask = 0,
+      .stencilWriteMask = 0,
   };
 
   // depth texture
   wgpu::TextureDescriptor depthTextureDesc{
-    .dimension = wgpu::TextureDimension::e2D,
-    .format = depthTextureFormat,
-    .mipLevelCount = 1,
-    .sampleCount = 1,
-    .size = {512, 512, 1},
-    .usage = wgpu::TextureUsage::RenderAttachment,
-    .viewFormatCount = 1,
-    .viewFormats = &depthTextureFormat,
+      .usage = wgpu::TextureUsage::RenderAttachment,
+      .dimension = wgpu::TextureDimension::e2D,
+      .size = {512, 512, 1},
+      .format = depthTextureFormat,
+      .mipLevelCount = 1,
+      .sampleCount = 1,
+      .viewFormatCount = 1,
+      .viewFormats = &depthTextureFormat,
   };
   depthTexture = device.CreateTexture(&depthTextureDesc);
   // Create the view of the depth texture manipulated by the rasterizer
   wgpu::TextureViewDescriptor depthTextureViewDesc{
-    .aspect = wgpu::TextureAspect::DepthOnly,
-    .baseArrayLayer = 0,
-    .arrayLayerCount = 1,
-    .baseMipLevel = 0,
-    .mipLevelCount = 1,
-    .dimension = wgpu::TextureViewDimension::e2D,
-    .format = depthTextureFormat,
+      .format = depthTextureFormat,
+      .dimension = wgpu::TextureViewDimension::e2D,
+      .baseMipLevel = 0,
+      .mipLevelCount = 1,
+      .baseArrayLayer = 0,
+      .arrayLayerCount = 1,
+      .aspect = wgpu::TextureAspect::DepthOnly,
   };
   depthTextureView = depthTexture.CreateView(&depthTextureViewDesc);
 
@@ -289,13 +289,13 @@ void CreateRenderPipeline() {
       .module = shaderModule, .targetCount = 1, .targets = &colorTargetState};
 
   wgpu::RenderPipelineDescriptor descriptor{
+      .layout = layout,
       .vertex = {.module = shaderModule,
                  .bufferCount = 1,
                  .buffers = &vertexBufferLayout},
       .primitive = {.topology = wgpu::PrimitiveTopology::TriangleList},
-      .fragment = &fragmentState,
-      .layout = layout,
       .depthStencil = &depthStencilState,
+      .fragment = &fragmentState,
   };
   pipeline = device.CreateRenderPipeline(&descriptor);
 }
@@ -317,20 +317,21 @@ void Render() {
       .loadOp = wgpu::LoadOp::Clear,
       .storeOp = wgpu::StoreOp::Store};
   wgpu::RenderPassDepthStencilAttachment depthStencilAttachment = {
-    .view = depthTextureView,
-    .depthClearValue = 1.0f,
-    .depthLoadOp = wgpu::LoadOp::Clear,
-    .depthStoreOp = wgpu::StoreOp::Store,
-    .depthReadOnly = false,
-    .stencilClearValue = 0,
-    .stencilStoreOp = wgpu::StoreOp::Undefined,
-    .stencilLoadOp = wgpu::LoadOp::Undefined,
-    .stencilReadOnly = true,
+      .view = depthTextureView,
+      .depthLoadOp = wgpu::LoadOp::Clear,
+      .depthStoreOp = wgpu::StoreOp::Store,
+      .depthClearValue = 1.0f,
+      .depthReadOnly = false,
+      .stencilLoadOp = wgpu::LoadOp::Undefined,
+      .stencilStoreOp = wgpu::StoreOp::Undefined,
+      .stencilClearValue = 0,
+      .stencilReadOnly = true,
   };
 
   wgpu::RenderPassDescriptor renderpass{.colorAttachmentCount = 1,
                                         .colorAttachments = &attachment,
-                                      .depthStencilAttachment = &depthStencilAttachment};
+                                        .depthStencilAttachment =
+                                            &depthStencilAttachment};
 
   wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
   wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderpass);
