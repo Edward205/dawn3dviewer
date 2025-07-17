@@ -11,9 +11,13 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "FileLoader.h"
+#include "FileLoader.hpp"
 #include "glm/ext/matrix_transform.hpp"
+#include "glm/ext/vector_float3.hpp"
 #include "glm/trigonometric.hpp"
+
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "tiny_obj_loader.hpp"
 
 const uint32_t kWidth = 512;
 const uint32_t kHeight = 512;
@@ -33,16 +37,19 @@ const char shaderCode[] = R"(
       model: mat4x4<f32>,
       view: mat4x4<f32>,
       projection: mat4x4<f32>,
+      lightDirection: vec3f,
       time: f32,
     }
     @group(0) @binding(0) var<uniform> uStdUniforms: StdUniforms;
     struct VertexInput {
         @location(0) position: vec3f,
-        @location(1) color: vec3f,
+        @location(1) normal: vec3f,
+        @location(2) color: vec3f,
     };
     struct VertexOutput {
         @builtin(position) position: vec4f,
         @location(0) color: vec3f,
+        @location(1) normal: vec3f,
     };
 
     @vertex fn vs_main(in: VertexInput) -> VertexOutput {
@@ -66,18 +73,23 @@ const char shaderCode[] = R"(
         out.position = uStdUniforms.projection * uStdUniforms.view * uStdUniforms.model * vec4f(in.position, 1.0);
 
         out.color = in.color;
+        out.normal = (uStdUniforms.model * vec4f(in.normal, 0.0)).xyz;
+
         return out;
     }
     @fragment fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-        return vec4f(in.color, 1.0);
+        let normal = normalize(in.normal);
+        let shading = dot(uStdUniforms.lightDirection, in.normal);
+        let color = in.color * shading;
+        return vec4f(color, 1.0);
     }
 )";
 struct StdUniforms {
   glm::mat4 model;
   glm::mat4 view;
   glm::mat4 projection;
+  glm::vec3 lightDirection;
   float time;
-  float _pad[3];
 };
 
 void Init() {
@@ -164,7 +176,7 @@ void CreateRenderPipeline() {
   std::vector<float> pointData;
   std::vector<uint16_t> indexData;
 
-  bool success = loadGeometry("res/webgpu.txt", pointData, indexData, 3);
+  bool success = loadGeometry("res/webgpu.txt", pointData, indexData, 6);
 
   if (!success) {
     std::cerr << "Could not load geometry!" << std::endl;
@@ -195,18 +207,21 @@ void CreateRenderPipeline() {
                                 bufferDesc.size);
 
   // buffer layout
-  std::vector<wgpu::VertexAttribute> vertexAttribs(2);
+  std::vector<wgpu::VertexAttribute> vertexAttribs(3);
 
   vertexAttribs[0] = {.format = wgpu::VertexFormat::Float32x3,
                       .offset = 0,
                       .shaderLocation = 0};
   vertexAttribs[1] = {.format = wgpu::VertexFormat::Float32x3,
                       .offset = 3 * sizeof(float),
-                      .shaderLocation = 1};
+                      .shaderLocation = 1};                  
+  vertexAttribs[2] = {.format = wgpu::VertexFormat::Float32x3,
+                      .offset = 6 * sizeof(float),
+                      .shaderLocation = 2};
 
   wgpu::VertexBufferLayout vertexBufferLayout = {
       .stepMode = wgpu::VertexStepMode::Vertex,
-      .arrayStride = 6 * sizeof(float),
+      .arrayStride = vertexAttribs.size() * 3 * sizeof(float),
       .attributeCount = vertexAttribs.size(),
       .attributes = vertexAttribs.data()};
 
@@ -224,8 +239,8 @@ void CreateRenderPipeline() {
     .model = glm::rotate(glm::mat4(1.0f), glm::radians(-55.0f), glm::vec3(1.0f, 0.0f, 0.0f)),
     .view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -3.0f)),
     .projection = glm::perspective(glm::radians(45.0f), (float)kWidth / kHeight, 0.1f, 100.0f),
+    .lightDirection = glm::vec3(0.5, -0.9, 0.1),
     .time = 0.0f,
-    ._pad = {0, 0, 0},
   };
   device.GetQueue().WriteBuffer(uniformBuffer, 0, &uniforms, sizeof(StdUniforms));
 
@@ -239,7 +254,7 @@ void CreateRenderPipeline() {
   // binding layout for the binding
   wgpu::BindGroupLayoutEntry bindingLayout{
       .binding = 0,
-      .visibility = wgpu::ShaderStage::Vertex,
+      .visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment,
       .buffer = {
           .type = wgpu::BufferBindingType::Uniform,
           .minBindingSize = sizeof(StdUniforms),
@@ -341,7 +356,7 @@ void InitGraphics() {
 void Render() {
   float t = static_cast<float>(glfwGetTime());
   device.GetQueue().WriteBuffer(uniformBuffer, offsetof(StdUniforms, time), &t, sizeof(float));
-  glm::mat4 model = glm::rotate(glm::mat4(1.0f), t, glm::vec3(0.0f, 1.0f, 0.0f));
+  glm::mat4 model = glm::rotate(glm::mat4(1.0f), t, glm::vec3(1.0f, 1.0f, 1.0f));
   model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
   device.GetQueue().WriteBuffer(uniformBuffer, offsetof(StdUniforms, model), &model, sizeof(glm::mat4));
 
