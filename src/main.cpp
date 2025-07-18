@@ -16,9 +16,6 @@
 #include "glm/ext/vector_float3.hpp"
 #include "glm/trigonometric.hpp"
 
-#define TINYOBJLOADER_IMPLEMENTATION
-#include "tiny_obj_loader.hpp"
-
 const uint32_t kWidth = 512;
 const uint32_t kHeight = 512;
 
@@ -123,7 +120,7 @@ void Init() {
   wgpu::Limits requiredLimits;
   requiredLimits.maxVertexAttributes = 8;
   requiredLimits.maxVertexBuffers = 4;
-  requiredLimits.maxBufferSize = 128 * 5 * sizeof(float);
+  requiredLimits.maxBufferSize = 10000 * sizeof(float) * 9;
   requiredLimits.maxVertexBufferArrayStride = 5 * sizeof(float);
   requiredLimits.maxTextureDimension1D = WGPU_LIMIT_U32_UNDEFINED;
   requiredLimits.maxTextureDimension2D = WGPU_LIMIT_U32_UNDEFINED;
@@ -163,8 +160,7 @@ void ConfigureSurface() {
 }
 
 wgpu::Buffer pointBuffer;
-wgpu::Buffer indexBuffer;
-uint32_t indexCount;
+uint32_t pointCount;
 wgpu::BindGroup bindGroup;
 wgpu::Buffer uniformBuffer;
 wgpu::Texture depthTexture;
@@ -176,14 +172,14 @@ void CreateRenderPipeline() {
   std::vector<float> pointData;
   std::vector<uint16_t> indexData;
 
-  bool success = loadGeometry("res/webgpu.txt", pointData, indexData, 6);
+  bool success = loadGeometryFromObj("res/mammoth.obj", pointData);
 
   if (!success) {
     std::cerr << "Could not load geometry!" << std::endl;
     exit(1);
   }
 
-  indexCount = static_cast<uint32_t>(indexData.size());
+  pointCount = static_cast<uint32_t>(pointData.size() / 9);
 
   // create point buffer
   wgpu::BufferDescriptor bufferDesc{.usage = wgpu::BufferUsage::CopyDst |
@@ -193,17 +189,6 @@ void CreateRenderPipeline() {
 
   pointBuffer = device.CreateBuffer(&bufferDesc);
   device.GetQueue().WriteBuffer(pointBuffer, 0, pointData.data(),
-                                bufferDesc.size);
-
-  // create index buffer
-  bufferDesc = {.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Index,
-                .size = indexData.size() * sizeof(uint16_t)};
-  // uint16_t is 2 bytes, we need to pad to a multiple of 4
-  bufferDesc.size = (bufferDesc.size + 3) & ~3;
-  indexData.resize((indexData.size() + 1) & ~1);
-
-  indexBuffer = device.CreateBuffer(&bufferDesc);
-  device.GetQueue().WriteBuffer(indexBuffer, 0, indexData.data(),
                                 bufferDesc.size);
 
   // buffer layout
@@ -221,7 +206,7 @@ void CreateRenderPipeline() {
 
   wgpu::VertexBufferLayout vertexBufferLayout = {
       .stepMode = wgpu::VertexStepMode::Vertex,
-      .arrayStride = vertexAttribs.size() * 3 * sizeof(float),
+      .arrayStride = 9 * sizeof(float),
       .attributeCount = vertexAttribs.size(),
       .attributes = vertexAttribs.data()};
 
@@ -239,7 +224,7 @@ void CreateRenderPipeline() {
     .model = glm::rotate(glm::mat4(1.0f), glm::radians(-55.0f), glm::vec3(1.0f, 0.0f, 0.0f)),
     .view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -3.0f)),
     .projection = glm::perspective(glm::radians(45.0f), (float)kWidth / kHeight, 0.1f, 100.0f),
-    .lightDirection = glm::vec3(0.5, -0.9, 0.1),
+    .lightDirection = glm::vec3(0, 0, 1),
     .time = 0.0f,
   };
   device.GetQueue().WriteBuffer(uniformBuffer, 0, &uniforms, sizeof(StdUniforms));
@@ -356,7 +341,7 @@ void InitGraphics() {
 void Render() {
   float t = static_cast<float>(glfwGetTime());
   device.GetQueue().WriteBuffer(uniformBuffer, offsetof(StdUniforms, time), &t, sizeof(float));
-  glm::mat4 model = glm::rotate(glm::mat4(1.0f), t, glm::vec3(1.0f, 1.0f, 1.0f));
+  glm::mat4 model = glm::rotate(glm::mat4(1.0f), t, glm::vec3(0.0f, 1.0f, 0.0f));
   model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
   device.GetQueue().WriteBuffer(uniformBuffer, offsetof(StdUniforms, model), &model, sizeof(glm::mat4));
 
@@ -367,7 +352,8 @@ void Render() {
   wgpu::RenderPassColorAttachment attachment{
       .view = surfaceTexture.texture.CreateView(),
       .loadOp = wgpu::LoadOp::Clear,
-      .storeOp = wgpu::StoreOp::Store};
+      .storeOp = wgpu::StoreOp::Store,
+      .clearValue = wgpu::Color{0.1, 0.1, 0.1, 1.0}};
   wgpu::RenderPassDepthStencilAttachment depthStencilAttachment = {
       .view = depthTextureView,
       .depthLoadOp = wgpu::LoadOp::Clear,
@@ -390,11 +376,10 @@ void Render() {
   pass.SetPipeline(pipeline);
 
   pass.SetVertexBuffer(0, pointBuffer, 0, pointBuffer.GetSize());
-  pass.SetIndexBuffer(indexBuffer, wgpu::IndexFormat::Uint16, 0,
-                      indexBuffer.GetSize());
+
   pass.SetBindGroup(0, bindGroup);
 
-  pass.DrawIndexed(indexCount);
+  pass.Draw(pointCount);
 
   pass.End();
   wgpu::CommandBuffer commands = encoder.Finish();
