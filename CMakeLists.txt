@@ -19,12 +19,14 @@ target_compile_options(dawnviewer PRIVATE -Wall -Wextra -pedantic)
 endif()
 
 set(DAWN_FETCH_DEPENDENCIES ON)
-add_subdirectory("dawn" EXCLUDE_FROM_ALL)
-add_subdirectory("glm" EXCLUDE_FROM_ALL)
+add_subdirectory("external/dawn" EXCLUDE_FROM_ALL)
+add_subdirectory("external/glm" EXCLUDE_FROM_ALL)
 target_include_directories(
-    dawnviewer PRIVATE ${CMAKE_BINARY_DIR}/dawn/include
+    dawnviewer PRIVATE ${CMAKE_BINARY_DIR}/external/dawn/include
+    dawnviewer PRIVATE ${CMAKE_BINARY_DIR}/external/glm/
+    dawnviewer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/external/tinyobjloader/include
+    dawnviewer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/external/entt/include
     dawnviewer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
-    dawnviewer PRIVATE ${CMAKE_BINARY_DIR}/glm/
 )
 
 target_link_libraries(dawnviewer PRIVATE dawn::webgpu_dawn glfw webgpu_glfw glm)

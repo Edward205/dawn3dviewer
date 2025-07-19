@@ -70,7 +70,7 @@ inline bool loadGeometry(
     return true;
 }
 
-bool loadGeometryFromObj(const std::filesystem::path& path, std::vector<float>& pointData) {
+inline bool loadGeometryFromObj(const std::filesystem::path& path, std::vector<float>& pointData) {
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
