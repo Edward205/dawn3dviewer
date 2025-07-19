@@ -1,7 +1,7 @@
 [submodule "dawn"]
-	path = dawn
+	path = external/dawn
 	url = https://dawn.googlesource.com/dawn
 	branch = chromium/7204
 [submodule "glm"]
-	path = glm
+	path = external/glm
 	url = https://github.com/g-truc/glm.git
