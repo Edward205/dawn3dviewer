@@ -11,7 +11,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "FileLoader.hpp"
+#include "file_loader.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/ext/vector_float3.hpp"
 #include "glm/trigonometric.hpp"
@@ -172,7 +172,7 @@ void CreateRenderPipeline() {
   std::vector<float> pointData;
   std::vector<uint16_t> indexData;
 
-  bool success = loadGeometryFromObj("res/mammoth.obj", pointData);
+  bool success = loadGeometryFromObj("res/teapot.obj", pointData);
 
   if (!success) {
     std::cerr << "Could not load geometry!" << std::endl;
