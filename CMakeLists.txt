@@ -9,6 +9,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_executable(dawnviewer 
     src/main.cpp
+    
+    src/components/mesh.cpp
+
+    src/scene.cpp
 )
 
 set_target_properties(dawnviewer PROPERTIES COMPILE_WARNING_AS_ERROR ON)
@@ -17,7 +21,7 @@ target_compile_options(dawnviewer PRIVATE /W4)
 else()
 target_compile_options(dawnviewer PRIVATE -Wall -Wextra -pedantic)
 endif()
-
+set(CMAKE_BUILD_TYPE Debug)
 set(DAWN_FETCH_DEPENDENCIES ON)
 add_subdirectory("external/dawn" EXCLUDE_FROM_ALL)
 add_subdirectory("external/glm" EXCLUDE_FROM_ALL)

@@ -2,7 +2,11 @@
 
 #include "dawn/webgpu_cpp.h"
 
-struct MeshComponent {
-    wgpu::Buffer vertexBuffer;
-    uint32_t indexCount;
-};
+namespace DawnViewer
+{
+    struct MeshComponent {
+        MeshComponent(std::vector<float>& pointData, wgpu::Device device);
+        ~MeshComponent();
+        wgpu::Buffer vertexBuffer;
+    };
+}

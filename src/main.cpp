@@ -3,6 +3,7 @@
 
 #include <GLFW/glfw3.h>
 #include <dawn/webgpu_cpp_print.h>
+#include <vector>
 #include <webgpu/webgpu_cpp.h>
 #include <webgpu/webgpu_glfw.h>
 
@@ -11,10 +12,12 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "file_loader.hpp"
+#include "components/mesh.hpp"
+#include "resources/mesh_loader.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/ext/vector_float3.hpp"
 #include "glm/trigonometric.hpp"
+#include "scene.hpp"
 
 const uint32_t kWidth = 512;
 const uint32_t kHeight = 512;
@@ -28,6 +31,10 @@ wgpu::Surface surface;
 wgpu::TextureFormat format;
 
 wgpu::RenderPipeline pipeline;
+
+DawnViewer::Scene scene;
+entt::entity entity1;
+entt::entity entity2;
 
 const char shaderCode[] = R"(
     struct StdUniforms {
@@ -54,10 +61,8 @@ const char shaderCode[] = R"(
         let ratio = 512.0 / 512.0;
         var offset = vec2f(0.0);
 
-        let angle = uStdUniforms.time; // you can multiply it go rotate faster
+        let angle = uStdUniforms.time;
 
-        // Rotate the position around the X axis by "mixing" a bit of Y and Z in
-        // the original Y and Z.
         let alpha = cos(angle);
         let beta = sin(angle);
         var position = vec3f(
@@ -65,7 +70,6 @@ const char shaderCode[] = R"(
           alpha * in.position.y + beta * in.position.z,
           alpha * in.position.z - beta * in.position.y,
         );
-        //out.position = vec4f(position.x, position.y * ratio, position.z * 0.5 + 0.5, 1.0);
 
         out.position = uStdUniforms.projection * uStdUniforms.view * uStdUniforms.model * vec4f(in.position, 1.0);
 
@@ -159,8 +163,6 @@ void ConfigureSurface() {
   surface.Configure(&config);
 }
 
-wgpu::Buffer pointBuffer;
-uint32_t pointCount;
 wgpu::BindGroup bindGroup;
 wgpu::Buffer uniformBuffer;
 wgpu::Texture depthTexture;
@@ -168,28 +170,17 @@ wgpu::TextureView depthTextureView;
 float currentTime = 1.0f;
 void CreateRenderPipeline() {
   // load a model
+  // create entity
+  entity1 = scene.createEntity();
+  std::vector<float> *pointData = new std::vector<float>;
+  DawnViewer::loadMeshFromObj("res/pyramid.obj", *pointData);
+  scene.addComponent<DawnViewer::MeshComponent>(entity1, *pointData, device);
 
-  std::vector<float> pointData;
-  std::vector<uint16_t> indexData;
+  entity2 = scene.createEntity();
+  std::vector<float> *pointData1 = new std::vector<float>;
+  DawnViewer::loadMeshFromObj("res/mammoth.obj", *pointData1);
+  scene.addComponent<DawnViewer::MeshComponent>(entity2, *pointData1, device);
 
-  bool success = loadGeometryFromObj("res/teapot.obj", pointData);
-
-  if (!success) {
-    std::cerr << "Could not load geometry!" << std::endl;
-    exit(1);
-  }
-
-  pointCount = static_cast<uint32_t>(pointData.size() / 9);
-
-  // create point buffer
-  wgpu::BufferDescriptor bufferDesc{.usage = wgpu::BufferUsage::CopyDst |
-                                             wgpu::BufferUsage::Vertex,
-                                    .size = pointData.size() * sizeof(float),
-                                    .mappedAtCreation = false};
-
-  pointBuffer = device.CreateBuffer(&bufferDesc);
-  device.GetQueue().WriteBuffer(pointBuffer, 0, pointData.data(),
-                                bufferDesc.size);
 
   // buffer layout
   std::vector<wgpu::VertexAttribute> vertexAttribs(3);
@@ -214,6 +205,7 @@ void CreateRenderPipeline() {
   wgpu::PipelineLayout layout;
 
   // uniform buffer
+  wgpu::BufferDescriptor bufferDesc;
   bufferDesc = {.usage =
                     wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
                 .size = sizeof(StdUniforms),
@@ -374,14 +366,19 @@ void Render() {
   wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
   wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderpass);
   pass.SetPipeline(pipeline);
-
-  pass.SetVertexBuffer(0, pointBuffer, 0, pointBuffer.GetSize());
-
   pass.SetBindGroup(0, bindGroup);
 
-  pass.Draw(pointCount);
-
+  for(entt::entity entity : scene.getRenderables())
+  {
+    // problema este ca se apeleaza destructorul undeva pe aici...
+    DawnViewer::MeshComponent *pointBuffer = scene.getComponent<DawnViewer::MeshComponent>(entity);
+    pass.SetVertexBuffer(0, pointBuffer->vertexBuffer, 0, pointBuffer->vertexBuffer.GetSize());
+    pass.Draw(pointBuffer->vertexBuffer.GetSize() / (sizeof(float) * 9));
+  }
   pass.End();
+
+
+
   wgpu::CommandBuffer commands = encoder.Finish();
   device.GetQueue().Submit(1, &commands);
 }

@@ -5,12 +5,17 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug",
-            "type": "gdb",
+            "name": "(lldb) Launch",
+            "type": "cppdbg",
             "request": "launch",
-            "target": "./build/dawnviewer",
-            "cwd": "${workspaceRoot}",
-            "valuesFormatting": "parseText"
-        }
+            "program": "${workspaceFolder}/build/dawnviewer",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb"
+        },
     ]
+
 }
