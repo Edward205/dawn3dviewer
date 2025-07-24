@@ -173,12 +173,12 @@ void CreateRenderPipeline() {
   // create entity
   entity1 = scene.createEntity();
   std::vector<float> *pointData = new std::vector<float>;
-  DawnViewer::loadMeshFromObj("res/pyramid.obj", *pointData);
+  DawnViewer::loadMeshFromObj("res/mammoth.obj", *pointData);
   scene.addComponent<DawnViewer::MeshComponent>(entity1, *pointData, device);
 
   entity2 = scene.createEntity();
   std::vector<float> *pointData1 = new std::vector<float>;
-  DawnViewer::loadMeshFromObj("res/mammoth.obj", *pointData1);
+  DawnViewer::loadMeshFromObj("res/teapot.obj", *pointData1);
   scene.addComponent<DawnViewer::MeshComponent>(entity2, *pointData1, device);
 
 
