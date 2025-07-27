@@ -1,4 +1,5 @@
 #include <cstddef>
+#include <cstdint>
 #include <iostream>
 
 #include <GLFW/glfw3.h>
@@ -37,14 +38,17 @@ entt::entity entity1;
 entt::entity entity2;
 
 const char shaderCode[] = R"(
-    struct StdUniforms {
-      model: mat4x4<f32>,
+    struct SceneUniforms {
       view: mat4x4<f32>,
       projection: mat4x4<f32>,
       lightDirection: vec3f,
       time: f32,
     }
-    @group(0) @binding(0) var<uniform> uStdUniforms: StdUniforms;
+    struct ObjectUniforms {
+      model: mat4x4<f32>,
+    }
+    @group(0) @binding(0) var<uniform> scene: SceneUniforms;
+    @group(1) @binding(0) var<uniform> object: ObjectUniforms;
     struct VertexInput {
         @location(0) position: vec3f,
         @location(1) normal: vec3f,
@@ -61,7 +65,7 @@ const char shaderCode[] = R"(
         let ratio = 512.0 / 512.0;
         var offset = vec2f(0.0);
 
-        let angle = uStdUniforms.time;
+        let angle = scene.time;
 
         let alpha = cos(angle);
         let beta = sin(angle);
@@ -71,26 +75,28 @@ const char shaderCode[] = R"(
           alpha * in.position.z - beta * in.position.y,
         );
 
-        out.position = uStdUniforms.projection * uStdUniforms.view * uStdUniforms.model * vec4f(in.position, 1.0);
+        out.position = scene.projection * scene.view * object.model * vec4f(in.position, 1.0);
 
         out.color = in.color;
-        out.normal = (uStdUniforms.model * vec4f(in.normal, 0.0)).xyz;
+        out.normal = (object.model * vec4f(in.normal, 0.0)).xyz;
 
         return out;
     }
     @fragment fn fs_main(in: VertexOutput) -> @location(0) vec4f {
         let normal = normalize(in.normal);
-        let shading = dot(uStdUniforms.lightDirection, in.normal);
+        let shading = dot(scene.lightDirection, in.normal);
         let color = in.color * shading;
         return vec4f(color, 1.0);
     }
 )";
-struct StdUniforms {
-  glm::mat4 model;
+struct SceneUniforms {
   glm::mat4 view;
   glm::mat4 projection;
   glm::vec3 lightDirection;
   float time;
+};
+struct ObjectUniforms {
+  glm::mat4 model;
 };
 
 void Init() {
@@ -163,8 +169,10 @@ void ConfigureSurface() {
   surface.Configure(&config);
 }
 
-wgpu::BindGroup bindGroup;
-wgpu::Buffer uniformBuffer;
+wgpu::BindGroup sceneBindGroup;
+wgpu::BindGroup objectBindGroup;
+wgpu::Buffer sceneUniformsBuffer;
+wgpu::Buffer objectUniformsBuffer;
 wgpu::Texture depthTexture;
 wgpu::TextureView depthTextureView;
 float currentTime = 1.0f;
@@ -205,61 +213,110 @@ void CreateRenderPipeline() {
   wgpu::PipelineLayout layout;
 
   // uniform buffer
+  // scene uniforms buffer
   wgpu::BufferDescriptor bufferDesc;
   bufferDesc = {.usage =
                     wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
-                .size = sizeof(StdUniforms),
+                .size = sizeof(SceneUniforms),
                 .mappedAtCreation = false};
-  uniformBuffer = device.CreateBuffer(&bufferDesc);
+  sceneUniformsBuffer = device.CreateBuffer(&bufferDesc);
 
-  StdUniforms uniforms{
-    .model = glm::rotate(glm::mat4(1.0f), glm::radians(-55.0f), glm::vec3(1.0f, 0.0f, 0.0f)),
-    .view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -3.0f)),
+  SceneUniforms uniforms{
+    .view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 2.0f, -10.0f)),
     .projection = glm::perspective(glm::radians(45.0f), (float)kWidth / kHeight, 0.1f, 100.0f),
     .lightDirection = glm::vec3(0, 0, 1),
     .time = 0.0f,
   };
-  device.GetQueue().WriteBuffer(uniformBuffer, 0, &uniforms, sizeof(StdUniforms));
+  device.GetQueue().WriteBuffer(sceneUniformsBuffer, 0, &uniforms, sizeof(SceneUniforms));
+  
+  // object uniform buffer
+  const uint32_t DYNAMIC_ALIGNMENT = 256;
+  const uint32_t MAX_ENTITIES = 1000;
+  bufferDesc = {.usage =
+                    wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
+                .size = MAX_ENTITIES * DYNAMIC_ALIGNMENT,
+                .mappedAtCreation = false};
+  objectUniformsBuffer = device.CreateBuffer(&bufferDesc);
 
-  // binding for the buffer
-  wgpu::BindGroupEntry binding{.nextInChain = nullptr,
+  ObjectUniforms objectUniforms {
+    .model = glm::rotate(glm::mat4(1.0f), glm::radians(-55.0f), glm::vec3(1.0f, 0.0f, 0.0f)),
+  };
+  device.GetQueue().WriteBuffer(objectUniformsBuffer, 0, &objectUniforms, sizeof(ObjectUniforms));
+
+  // binding for the scene uniforms buffer
+  wgpu::BindGroupEntry sceneBindGroupEntry{.nextInChain = nullptr,
                                .binding = 0,
-                               .buffer = uniformBuffer,
-                               .offset = 0,
-                               .size = sizeof(StdUniforms)};
+                               .buffer = sceneUniformsBuffer,
+                               .size = sizeof(SceneUniforms)};
 
-  // binding layout for the binding
-  wgpu::BindGroupLayoutEntry bindingLayout{
+  // binding for the scene uniforms buffer
+  wgpu::BindGroupEntry objectBindGroupEntry{.nextInChain = nullptr,
+                               .binding = 0,
+                               .buffer = objectUniformsBuffer,
+                               .size = sizeof(ObjectUniforms)};
+
+  // binding layout for the object binding
+  wgpu::BindGroupLayoutEntry sceneLayoutEntry{
       .binding = 0,
       .visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment,
       .buffer = {
           .type = wgpu::BufferBindingType::Uniform,
-          .minBindingSize = sizeof(StdUniforms),
+          .minBindingSize = sizeof(SceneUniforms),
+      }};
+  // binding layout for the object binding
+  wgpu::BindGroupLayoutEntry objectLayoutEntry{
+      .binding = 0,
+      .visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment,
+      .buffer = {
+          .type = wgpu::BufferBindingType::Uniform,
+          .hasDynamicOffset = true,
+          .minBindingSize = sizeof(ObjectUniforms),
       }};
 
-  // bind group layout
+  // scene bind group layout
   wgpu::BindGroupLayoutDescriptor bindGroupLayoutDesc{
       .nextInChain = nullptr,
       .entryCount = 1,
-      .entries = &bindingLayout,
+      .entries = &sceneLayoutEntry,
   };
-  wgpu::BindGroupLayout bindGroupLayout;
-  bindGroupLayout = device.CreateBindGroupLayout(&bindGroupLayoutDesc);
+  wgpu::BindGroupLayout sceneBindGroupLayout;
+  sceneBindGroupLayout = device.CreateBindGroupLayout(&bindGroupLayoutDesc);
 
-  // bind group
-  wgpu::BindGroupDescriptor bindGroupDesc{
+  // scene bind group layout
+  bindGroupLayoutDesc = {
       .nextInChain = nullptr,
-      .layout = bindGroupLayout,
       .entryCount = 1,
-      .entries = &binding,
+      .entries = &objectLayoutEntry,
   };
-  bindGroup = device.CreateBindGroup(&bindGroupDesc);
+  wgpu::BindGroupLayout objectBindGroupLayout;
+  objectBindGroupLayout = device.CreateBindGroupLayout(&bindGroupLayoutDesc);
+
+
+  // scene bind group 
+  wgpu::BindGroupDescriptor sceneBindGroupDescriptor{
+      .nextInChain = nullptr,
+      .layout = sceneBindGroupLayout,
+      .entryCount = 1,
+      .entries = &sceneBindGroupEntry,
+  };
+  sceneBindGroup = device.CreateBindGroup(&sceneBindGroupDescriptor);
+
+  // object bind group 
+  wgpu::BindGroupDescriptor objectBindGroupDescriptor{
+      .nextInChain = nullptr,
+      .layout = objectBindGroupLayout,
+      .entryCount = 1,
+      .entries = &objectBindGroupEntry,
+  };
+  objectBindGroup = device.CreateBindGroup(&objectBindGroupDescriptor);
+
 
   // layout
+  std::vector<wgpu::BindGroupLayout> bindGroupLayouts = { sceneBindGroupLayout, objectBindGroupLayout };
   wgpu::PipelineLayoutDescriptor layoutDesc{
       .nextInChain = nullptr,
-      .bindGroupLayoutCount = 1,
-      .bindGroupLayouts = &bindGroupLayout,
+      .bindGroupLayoutCount = bindGroupLayouts.size(),
+      .bindGroupLayouts = bindGroupLayouts.data(),
   };
   layout = device.CreatePipelineLayout(&layoutDesc);
 
@@ -332,11 +389,47 @@ void InitGraphics() {
 
 void Render() {
   float t = static_cast<float>(glfwGetTime());
-  device.GetQueue().WriteBuffer(uniformBuffer, offsetof(StdUniforms, time), &t, sizeof(float));
+  device.GetQueue().WriteBuffer(sceneUniformsBuffer, offsetof(SceneUniforms, time), &t, sizeof(float));
+
   glm::mat4 model = glm::rotate(glm::mat4(1.0f), t, glm::vec3(0.0f, 1.0f, 0.0f));
   model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-  device.GetQueue().WriteBuffer(uniformBuffer, offsetof(StdUniforms, model), &model, sizeof(glm::mat4));
+  device.GetQueue().WriteBuffer(objectUniformsBuffer, offsetof(ObjectUniforms, model), &model, sizeof(glm::mat4));
+  device.GetQueue().WriteBuffer(objectUniformsBuffer, offsetof(ObjectUniforms, model) + sizeof(ObjectUniforms), &model, sizeof(glm::mat4));
 
+   // You likely already have the number of renderable entities
+  size_t entityCount = scene.getRenderables().size(); 
+  const uint32_t DYNAMIC_ALIGNMENT = 256;
+  const uint32_t MAX_ENTITIES = 1000;
+
+  // Create a CPU-side buffer with the correct padding
+  std::vector<uint8_t> objectDataBuffer(MAX_ENTITIES * DYNAMIC_ALIGNMENT);
+
+  // Get the current time to use for animation
+  float time = t; // Get time from your scene uniforms or clock
+
+  for (size_t i = 0; i < entityCount; ++i) {
+    // 1. Calculate a unique position for each object (e.g., arrange in a circle)
+    float angle = 2.0f * glm::pi<float>() * i / entityCount;
+    glm::vec3 position = glm::vec3(cos(angle) * 2.0f, sin(angle) * 2.0f, 0.0f);
+    
+    // 2. Calculate a unique rotation for each object
+    float rotationAngle = time * (0.5f * (i + 1)); // Different speed for each
+    glm::quat rotation = glm::angleAxis(rotationAngle, glm::vec3(0.0f, 0.0f, 1.0f));
+
+    // 3. Combine into a final model matrix
+    glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
+    model = model * glm::mat4(rotation);
+    
+    // 4. Create the uniform data for this single object
+    ObjectUniforms objectUniforms;
+    objectUniforms.model = model;
+
+    // 5. Copy this object's data into the correct slot in our CPU buffer
+    memcpy(objectDataBuffer.data() + i * DYNAMIC_ALIGNMENT, &objectUniforms, sizeof(ObjectUniforms));
+  }
+
+  // 6. Upload the entire buffer of object data to the GPU in one call
+  device.GetQueue().WriteBuffer(objectUniformsBuffer, 0, objectDataBuffer.data(), entityCount * DYNAMIC_ALIGNMENT);
 
   wgpu::SurfaceTexture surfaceTexture;
   surface.GetCurrentTexture(&surfaceTexture);
@@ -366,14 +459,19 @@ void Render() {
   wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
   wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderpass);
   pass.SetPipeline(pipeline);
-  pass.SetBindGroup(0, bindGroup);
-
+  pass.SetBindGroup(0, sceneBindGroup);
+  
+  int entityIndex = 0;
   for(entt::entity entity : scene.getRenderables())
   {
-    // problema este ca se apeleaza destructorul undeva pe aici...
+    uint32_t dynamicOffset = entityIndex * 256;
+
+    pass.SetBindGroup(1, objectBindGroup, 1, &dynamicOffset);
     DawnViewer::MeshComponent *pointBuffer = scene.getComponent<DawnViewer::MeshComponent>(entity);
     pass.SetVertexBuffer(0, pointBuffer->vertexBuffer, 0, pointBuffer->vertexBuffer.GetSize());
     pass.Draw(pointBuffer->vertexBuffer.GetSize() / (sizeof(float) * 9));
+  
+    ++entityIndex;
   }
   pass.End();
 
