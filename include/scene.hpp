@@ -26,6 +26,16 @@ namespace DawnViewer {
         Component* getComponent(entt::entity entity) {
             return registry_.try_get<Component>(entity);
         }
+
+        template<typename Component, typename... Func> 
+        void patchComponent(entt::entity entity, Func&&... func) {
+            registry_.patch<Component>(entity, std::forward<Func>(func)...);
+        }
+
+        template<typename Component> // TODO: this might not be aligned with the rest of the functions
+        auto viewComponents() {
+            return registry_.view<Component>();
+        }
     private:
         entt::registry registry_;
     };

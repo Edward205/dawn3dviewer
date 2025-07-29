@@ -226,7 +226,7 @@ void CreateRenderPipeline() {
   sceneUniformsBuffer = device.CreateBuffer(&bufferDesc);
 
   SceneUniforms uniforms{
-    .view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 2.0f, -10.0f)),
+    .view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -5.0f)),
     .projection = glm::perspective(glm::radians(45.0f), (float)kWidth / kHeight, 0.1f, 100.0f),
     .lightDirection = glm::vec3(0, 0, 1),
     .time = 0.0f,
@@ -391,17 +391,44 @@ void InitGraphics() {
 
 std::vector<uint8_t> objectDataBuffer(MAX_ENTITIES * DYNAMIC_BUFFER_ALIGNMENT);
 void Render() {
+
+  
+  
   // update uniforms
   float t = static_cast<float>(glfwGetTime());
   device.GetQueue().WriteBuffer(sceneUniformsBuffer, offsetof(SceneUniforms, time), &t, sizeof(float));
+  
+  // position, rotation, scale demo
+  std::vector<entt::entity> renderables = scene.getRenderables();
+  const float rotationSpeed = 0.05f;
+  
+  auto view = scene.viewComponents<DawnViewer::TransformComponent>();
+  int a = 2;
+  for (auto entity : view) {
+    auto& transform = view.get<DawnViewer::TransformComponent>(entity);
+    
+    glm::vec3 upAxis;
+    if(a % 2 == 0)
+      upAxis = glm::vec3(1.0f, 0.0f, 1.0f);
+    else
+      upAxis = glm::vec3(1.0f, 5.0f, 0.0f);
+    glm::quat rotationDelta = glm::angleAxis(rotationSpeed, upAxis);
+    
+    // Apply the new rotation by multiplying with the existing one
+    // The order matters: this applies the rotation in the object's local space
+    transform.rotation = transform.rotation * rotationDelta;
+
+    // Normalize to prevent floating point drift over time
+    transform.rotation = glm::normalize(transform.rotation);
+    ++a;
+  }
 
   // update object uniforms
-  std::vector<entt::entity> renderables = scene.getRenderables();
   for (size_t i = 0; i < renderables.size(); ++i) {
     const auto& transform = scene.getComponent<DawnViewer::TransformComponent>(renderables[i]);
     
     const glm::mat4 model = glm::translate(glm::mat4(1.0f), transform->position) *
-                            glm::mat4_cast(glm::quat(transform->rotation)) *
+                            glm::mat4_cast(transform->rotation) *
                             glm::scale(glm::mat4(1.0f), transform->scale);
     
     uint8_t* destination = objectDataBuffer.data() 
