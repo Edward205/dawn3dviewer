@@ -1,5 +1,3 @@
-#include <cstddef>
-#include <cstdint>
 #include <iostream>
 
 #include <GLFW/glfw3.h>
@@ -12,8 +10,10 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include "components/mesh.hpp"
+#include "components/transform.hpp"
 #include "resources/mesh_loader.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/ext/vector_float3.hpp"
@@ -22,6 +22,8 @@
 
 const uint32_t kWidth = 512;
 const uint32_t kHeight = 512;
+const uint32_t DYNAMIC_BUFFER_ALIGNMENT = 256;
+const uint32_t MAX_ENTITIES = 1000;
 
 wgpu::Instance instance;
 
@@ -183,11 +185,13 @@ void CreateRenderPipeline() {
   std::vector<float> *pointData = new std::vector<float>;
   DawnViewer::loadMeshFromObj("res/mammoth.obj", *pointData);
   scene.addComponent<DawnViewer::MeshComponent>(entity1, *pointData, device);
+  scene.addComponent<DawnViewer::TransformComponent>(entity1, glm::vec3(0, 0, 0), glm::vec3(0, 0, 0), glm::vec3(1));
 
   entity2 = scene.createEntity();
   std::vector<float> *pointData1 = new std::vector<float>;
   DawnViewer::loadMeshFromObj("res/teapot.obj", *pointData1);
   scene.addComponent<DawnViewer::MeshComponent>(entity2, *pointData1, device);
+  scene.addComponent<DawnViewer::TransformComponent>(entity2, glm::vec3(1, 0, 0), glm::vec3(0, 0, 0), glm::vec3(1));
 
 
   // buffer layout
@@ -230,11 +234,9 @@ void CreateRenderPipeline() {
   device.GetQueue().WriteBuffer(sceneUniformsBuffer, 0, &uniforms, sizeof(SceneUniforms));
   
   // object uniform buffer
-  const uint32_t DYNAMIC_ALIGNMENT = 256;
-  const uint32_t MAX_ENTITIES = 1000;
   bufferDesc = {.usage =
                     wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
-                .size = MAX_ENTITIES * DYNAMIC_ALIGNMENT,
+                .size = MAX_ENTITIES * DYNAMIC_BUFFER_ALIGNMENT,
                 .mappedAtCreation = false};
   objectUniformsBuffer = device.CreateBuffer(&bufferDesc);
 
@@ -387,49 +389,28 @@ void InitGraphics() {
   CreateRenderPipeline();
 }
 
+std::vector<uint8_t> objectDataBuffer(MAX_ENTITIES * DYNAMIC_BUFFER_ALIGNMENT);
 void Render() {
+  // update uniforms
   float t = static_cast<float>(glfwGetTime());
   device.GetQueue().WriteBuffer(sceneUniformsBuffer, offsetof(SceneUniforms, time), &t, sizeof(float));
 
-  glm::mat4 model = glm::rotate(glm::mat4(1.0f), t, glm::vec3(0.0f, 1.0f, 0.0f));
-  model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-  device.GetQueue().WriteBuffer(objectUniformsBuffer, offsetof(ObjectUniforms, model), &model, sizeof(glm::mat4));
-  device.GetQueue().WriteBuffer(objectUniformsBuffer, offsetof(ObjectUniforms, model) + sizeof(ObjectUniforms), &model, sizeof(glm::mat4));
-
-   // You likely already have the number of renderable entities
-  size_t entityCount = scene.getRenderables().size(); 
-  const uint32_t DYNAMIC_ALIGNMENT = 256;
-  const uint32_t MAX_ENTITIES = 1000;
-
-  // Create a CPU-side buffer with the correct padding
-  std::vector<uint8_t> objectDataBuffer(MAX_ENTITIES * DYNAMIC_ALIGNMENT);
-
-  // Get the current time to use for animation
-  float time = t; // Get time from your scene uniforms or clock
-
-  for (size_t i = 0; i < entityCount; ++i) {
-    // 1. Calculate a unique position for each object (e.g., arrange in a circle)
-    float angle = 2.0f * glm::pi<float>() * i / entityCount;
-    glm::vec3 position = glm::vec3(cos(angle) * 2.0f, sin(angle) * 2.0f, 0.0f);
+  // update object uniforms
+  std::vector<entt::entity> renderables = scene.getRenderables();
+  for (size_t i = 0; i < renderables.size(); ++i) {
+    const auto& transform = scene.getComponent<DawnViewer::TransformComponent>(renderables[i]);
     
-    // 2. Calculate a unique rotation for each object
-    float rotationAngle = time * (0.5f * (i + 1)); // Different speed for each
-    glm::quat rotation = glm::angleAxis(rotationAngle, glm::vec3(0.0f, 0.0f, 1.0f));
-
-    // 3. Combine into a final model matrix
-    glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
-    model = model * glm::mat4(rotation);
+    const glm::mat4 model = glm::translate(glm::mat4(1.0f), transform->position) *
+                            glm::mat4_cast(glm::quat(transform->rotation)) *
+                            glm::scale(glm::mat4(1.0f), transform->scale);
     
-    // 4. Create the uniform data for this single object
-    ObjectUniforms objectUniforms;
-    objectUniforms.model = model;
+    uint8_t* destination = objectDataBuffer.data() 
+                          + (i * DYNAMIC_BUFFER_ALIGNMENT) 
+                          + offsetof(ObjectUniforms, model);
 
-    // 5. Copy this object's data into the correct slot in our CPU buffer
-    memcpy(objectDataBuffer.data() + i * DYNAMIC_ALIGNMENT, &objectUniforms, sizeof(ObjectUniforms));
+    memcpy(destination, &model, sizeof(glm::mat4)); // i hope this won't explode later 
   }
-
-  // 6. Upload the entire buffer of object data to the GPU in one call
-  device.GetQueue().WriteBuffer(objectUniformsBuffer, 0, objectDataBuffer.data(), entityCount * DYNAMIC_ALIGNMENT);
+  device.GetQueue().WriteBuffer(objectUniformsBuffer, 0, objectDataBuffer.data(), renderables.size() * DYNAMIC_BUFFER_ALIGNMENT);
 
   wgpu::SurfaceTexture surfaceTexture;
   surface.GetCurrentTexture(&surfaceTexture);
@@ -462,7 +443,7 @@ void Render() {
   pass.SetBindGroup(0, sceneBindGroup);
   
   int entityIndex = 0;
-  for(entt::entity entity : scene.getRenderables())
+  for(entt::entity entity : renderables)
   {
     uint32_t dynamicOffset = entityIndex * 256;
 
