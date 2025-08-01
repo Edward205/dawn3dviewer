@@ -14,5 +14,7 @@ namespace DawnViewer {
         glfwDestroyWindow(window);
         //glfwTerminate(); 
     }
-
+    Window::~Window() {
+        shutdown();
+    }
 }

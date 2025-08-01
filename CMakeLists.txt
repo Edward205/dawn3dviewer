@@ -13,6 +13,7 @@ add_executable(dawnviewer
     src/components/mesh.cpp
 
     src/core/app.cpp
+    src/core/renderer.cpp
     src/core/window.cpp
 
     src/scene.cpp

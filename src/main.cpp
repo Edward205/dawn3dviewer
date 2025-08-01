@@ -14,6 +14,7 @@
 
 #include "components/mesh.hpp"
 #include "components/transform.hpp"
+#include "core/window.hpp"
 #include "resources/mesh_loader.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/ext/vector_float3.hpp"
@@ -511,6 +512,8 @@ void Start() {
 }
 
 int main() {
+  DawnViewer::Window window;
+  window.create("test", 50, 50);
   Init();
   Start();
   // TODO: destroy

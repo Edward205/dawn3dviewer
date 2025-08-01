@@ -1,5 +1,4 @@
 #include "components/mesh.hpp"
-#include <iostream>
 
 namespace DawnViewer {
     MeshComponent::MeshComponent(std::vector<float>& pointData, wgpu::Device device)
