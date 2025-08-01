@@ -18,11 +18,13 @@ add_executable(dawnviewer
     src/scene.cpp
 )
 
-set_target_properties(dawnviewer PROPERTIES COMPILE_WARNING_AS_ERROR ON)
 if (MSVC)
 target_compile_options(dawnviewer PRIVATE /W4)
 else()
 target_compile_options(dawnviewer PRIVATE -Wall -Wextra -pedantic)
+
+# MSVC generates warnings which we can't fix because they are outside of our codebase
+set_target_properties(dawnviewer PROPERTIES COMPILE_WARNING_AS_ERROR ON) 
 endif()
 set(CMAKE_BUILD_TYPE Debug)
 set(DAWN_FETCH_DEPENDENCIES ON)
