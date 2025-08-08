@@ -1,11 +1,12 @@
 #include "core/renderer.hpp"
-#include "components/mesh.hpp"
+
 #include <iostream>
 #include <string>
+
+#include "components/mesh.hpp"
 namespace DawnViewer {
-    void Renderer::init()
-    {
-        // -------------- START WGPU --------------
+void Renderer::init() {
+  // -------------- START WGPU --------------
 
   // Get WebGPU instance
   wgpu::InstanceDescriptor instanceDesc{
@@ -16,10 +17,10 @@ namespace DawnViewer {
   wgpu::Future f1 = instance.RequestAdapter(
       nullptr, wgpu::CallbackMode::WaitAnyOnly,
       [this](wgpu::RequestAdapterStatus status, wgpu::Adapter a,
-         wgpu::StringView message) {
+             wgpu::StringView message) {
         if (status != wgpu::RequestAdapterStatus::Success) {
           std::cout << "RequestAdapter: " << std::string(message) << "\n";
-          exit(0); // TODO better error handling
+          exit(0);  // TODO better error handling
         }
         adapter = std::move(a);
       });
@@ -30,7 +31,8 @@ namespace DawnViewer {
   desc.SetUncapturedErrorCallback([](const wgpu::Device &,
                                      wgpu::ErrorType errorType,
                                      wgpu::StringView message) {
-    std::cout << "Error: " << static_cast<int>(errorType) << " - message: " << std::string(message) << "\n";
+    std::cout << "Error: " << static_cast<int>(errorType)
+              << " - message: " << std::string(message) << "\n";
   });
 
   // Set device requirements
@@ -51,17 +53,16 @@ namespace DawnViewer {
   wgpu::Future f2 = adapter.RequestDevice(
       &desc, wgpu::CallbackMode::WaitAnyOnly,
       [this](wgpu::RequestDeviceStatus status, wgpu::Device d,
-         wgpu::StringView message) {
+             wgpu::StringView message) {
         if (status != wgpu::RequestDeviceStatus::Success) {
           std::cout << "RequestDevice: " << std::string(message) << "\n";
-          exit(0); // TODO better error handling
+          exit(0);  // TODO better error handling
         }
         device = std::move(d);
       });
   // TODO: Don't wait infinetly long for the device
   instance.WaitAny(f2, UINT64_MAX);
 
-        
-        // -------------- ... --------------
-    }
+  // -------------- ... --------------
 }
+}  // namespace DawnViewer
