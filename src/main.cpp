@@ -4,22 +4,29 @@
 #include "core/window.hpp"
 int main() {
   DawnViewer::Window window;
+  DawnViewer::Renderer renderer;
+
   window.create("test", 512, 512);
 
   wgpu::Instance instance;
-  wgpu::InstanceDescriptor instanceDesc{
-      .capabilities = {.timedWaitAnyEnable = true}};
+  wgpu::InstanceDescriptor instanceDesc{.capabilities = {.timedWaitAnyEnable = true}};
   instance = wgpu::CreateInstance(&instanceDesc);
 
-  wgpu::Surface surface = window.createSurface(instance);
+  window.createSurface(instance);
+  renderer.setSurface(window.getSurface());
+  
+  window.onResize([&renderer](int w, int h) {
+    renderer.resize(w, h);
+  });
 
-  DawnViewer::Renderer renderer;
-  renderer.init(instance, surface);
+  renderer.init(instance, 512, 512);
 
-  while(true)
-  {
-    renderer.render(instance, surface);
+  while (true) {
+    glfwPollEvents();
+    renderer.render(instance);
   }
 
-  // TODO: destroy
+  renderer.shutdown();
+  window.shutdown();
+  glfwTerminate();
 }

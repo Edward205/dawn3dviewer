@@ -7,19 +7,18 @@
 namespace DawnViewer {
 class Renderer {
  public:
-  void init(wgpu::Instance instance, wgpu::Surface surface);
+  void init(wgpu::Instance instance, uint32_t w, uint32_t h);
   void shutdown();
-  void render(wgpu::Instance instance, wgpu::Surface surface);
-  void resize(uint32_t width, uint32_t height);
-
+  void render(wgpu::Instance instance);
+  void resize(uint32_t newWidth, uint32_t newHeight);
+  void setSurface(wgpu::Surface newSurface);
  private:
   wgpu::Adapter adapter;
   wgpu::Device device;
+  wgpu::Surface surface;
 
   wgpu::Buffer sceneUniformsBuffer;
   wgpu::Buffer objectUniformsBuffer;
-  wgpu::BindGroupLayout sceneBindGroupLayout;
-  wgpu::BindGroupLayout objectBindGroupLayout;
   wgpu::BindGroup sceneBindGroup;
   wgpu::BindGroup objectBindGroup;
   wgpu::Texture depthTexture;
@@ -27,8 +26,8 @@ class Renderer {
   wgpu::PipelineLayout pipelineLayout;
   wgpu::RenderPipeline pipeline;
 
-  const uint32_t kWidth = 512;
-  const uint32_t kHeight = 512;
+  uint32_t width = 512;
+  uint32_t height = 512;
   const uint32_t DYNAMIC_BUFFER_ALIGNMENT = 256;
   const uint32_t MAX_ENTITIES = 1000;
 

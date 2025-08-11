@@ -1,11 +1,14 @@
 #include "core/renderer.hpp"
 
+#include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <string>
 
 #include "GLFW/glfw3.h"
 #include "components/mesh.hpp"
 #include "components/transform.hpp"
+#include "glm/ext/matrix_float4x4.hpp"
 #include "resources/mesh_loader.hpp"
 namespace DawnViewer {
 void Renderer::initDevice(wgpu::Instance instance) {
@@ -63,24 +66,24 @@ void Renderer::initSurface(wgpu::Surface surface) {
   format = capabilities.formats[0];
   wgpu::SurfaceConfiguration config{.device = device,
                                     .format = format,
-                                    .width = kWidth,
-                                    .height = kHeight,
+                                    .width = width,
+                                    .height = height,
                                     .presentMode = wgpu::PresentMode::Fifo};
   surface.Configure(&config);
 }
 void Renderer::initScene() {
-  entity1 = scene.createEntity();
+  /*entity1 = scene.createEntity();
   std::vector<float> *pointData = new std::vector<float>;
   DawnViewer::loadMeshFromObj("res/mammoth.obj", *pointData);
   scene.addComponent<DawnViewer::MeshComponent>(entity1, *pointData, device);
   scene.addComponent<DawnViewer::TransformComponent>(entity1, glm::vec3(0, 0, 0), glm::vec3(0, 0, 0),
                                                 glm::vec3(1));
-
+*/
   entity2 = scene.createEntity();
   std::vector<float> *pointData1 = new std::vector<float>;
   DawnViewer::loadMeshFromObj("res/teapot.obj", *pointData1);
   scene.addComponent<DawnViewer::MeshComponent>(entity2, *pointData1, device);
-  scene.addComponent<DawnViewer::TransformComponent>(entity2, glm::vec3(1, 0, 0), glm::vec3(0, 0, 0),
+  scene.addComponent<DawnViewer::TransformComponent>(entity2, glm::vec3(0, 0, 0), glm::vec3(0, 0, 0),
                                                 glm::vec3(1));
 }
 void Renderer::initUniforms() {
@@ -92,7 +95,7 @@ void Renderer::initUniforms() {
   sceneUniformsBuffer = device.CreateBuffer(&bufferDesc);
   SceneUniforms sceneUniforms{
       .view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -5.0f)),
-      .projection = glm::perspective(glm::radians(45.0f), (float)kWidth / kHeight, 0.1f, 100.0f),
+      .projection = glm::perspective(glm::radians(45.0f), (float)width / height, 0.1f, 100.0f),
       .lightDirection = glm::vec3(0, 0, 1),
       .time = 0.0f,
   };
@@ -109,6 +112,9 @@ void Renderer::initUniforms() {
   device.GetQueue().WriteBuffer(objectUniformsBuffer, 0, &objectUniforms, sizeof(ObjectUniforms));
 }
 void Renderer::initBindGroups() {
+  wgpu::BindGroupLayout sceneBindGroupLayout;
+  wgpu::BindGroupLayout objectBindGroupLayout;
+
   // Scene bind group layout
   wgpu::BindGroupLayoutEntry sceneLayoutEntry{
       .binding = 0,
@@ -155,7 +161,7 @@ void Renderer::initDepthBuffer() {
   wgpu::TextureDescriptor depthTextureDesc{
       .usage = wgpu::TextureUsage::RenderAttachment,
       .dimension = wgpu::TextureDimension::e2D,
-      .size = {kWidth, kHeight, 1},
+      .size = {width, height, 1},
       .format = depthFormat,
       .mipLevelCount = 1,
       .sampleCount = 1,
@@ -268,7 +274,9 @@ void Renderer::initPipeline() {
   pipeline = device.CreateRenderPipeline(&descriptor);
 }
 
-void Renderer::init(wgpu::Instance instance, wgpu::Surface surface) {
+void Renderer::init(wgpu::Instance instance, uint32_t w, uint32_t h) {
+  width = w;
+  height = h;
   initDevice(instance);
   initSurface(surface);
 
@@ -281,7 +289,7 @@ void Renderer::init(wgpu::Instance instance, wgpu::Surface surface) {
   objectDataBuffer.resize(MAX_ENTITIES * DYNAMIC_BUFFER_ALIGNMENT);
 }
 
-void Renderer::render(wgpu::Instance instance, wgpu::Surface surface) {
+void Renderer::render(wgpu::Instance instance) {
   // update uniforms
   float t = static_cast<float>(glfwGetTime());
   device.GetQueue().WriteBuffer(sceneUniformsBuffer, offsetof(SceneUniforms, time), &t,
@@ -289,7 +297,7 @@ void Renderer::render(wgpu::Instance instance, wgpu::Surface surface) {
 
   // position, rotation, scale demo
   std::vector<entt::entity> renderables = scene.getRenderables();
-  const float rotationSpeed = 0.05f;
+  const float rotationSpeed = 0.02f;
 
   auto view = scene.viewComponents<DawnViewer::TransformComponent>();
   int a = 2;
@@ -375,6 +383,25 @@ void Renderer::render(wgpu::Instance instance, wgpu::Surface surface) {
 
   surface.Present();
   instance.ProcessEvents();
+}
+void Renderer::resize(uint32_t newWidth, uint32_t newHeight)
+{
+  width = newWidth;
+  height = newHeight;
+  initSurface(surface);
+  initDepthBuffer();
+
+  // recalculate SceneUniforms projection
+  glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)width / height, 0.1f, 100.0f);
+  device.GetQueue().WriteBuffer(sceneUniformsBuffer, offsetof(SceneUniforms, projection), &projection, sizeof(projection));
+}
+void Renderer::setSurface(wgpu::Surface newSurface) {
+  surface = newSurface;
+}
+void Renderer::shutdown() {
+  sceneUniformsBuffer.Destroy();
+  objectUniformsBuffer.Destroy();
+  depthTexture.Destroy();
 }
 
 }  // namespace DawnViewer

@@ -11,16 +11,31 @@ void Window::create(const char* title, int width, int height) {
 
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   window = glfwCreateWindow(width, height, title, nullptr, nullptr);
-};
-void Window::shutdown() {
-  glfwDestroyWindow(window);
-  // glfwTerminate();
-}
-wgpu::Surface Window::createSurface(wgpu::Instance instance) {
-    if (!window || !instance) {
-        return nullptr;
-    }
-    return wgpu::glfw::CreateSurfaceForWindow(instance, window);}
 
-Window::~Window() { shutdown(); }
+  // set current window as active
+  glfwSetWindowUserPointer(window, this);
+
+  glfwSetFramebufferSizeCallback(window, [](GLFWwindow* glfwWin, int w, int h) {
+    auto* windowInstance = static_cast<Window*>(glfwGetWindowUserPointer(glfwWin));
+
+    if (windowInstance && windowInstance->resizeCallback) {
+      windowInstance->resizeCallback(w, h);
+    }
+  });
+};
+void Window::onResize(std::function<void(int width, int height)> callback) {
+  resizeCallback = callback;
+}
+
+void Window::shutdown() { glfwDestroyWindow(window); }
+void Window::createSurface(wgpu::Instance instance) {
+  if (!window || !instance) {
+    return;
+  }
+  surface = wgpu::glfw::CreateSurfaceForWindow(instance, window);
+}
+wgpu::Surface Window::getSurface() {
+  return surface;
+}
+
 }  // namespace DawnViewer
