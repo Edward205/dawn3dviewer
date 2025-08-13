@@ -2,11 +2,18 @@
 
 #include "core/renderer.hpp"
 #include "core/window.hpp"
+#include "spdlog/spdlog.h"
+
+#define INITIAL_WIDTH 1280
+#define INITIAL_HEIGHT 720
+
 int main() {
+  spdlog::set_level(spdlog::level::debug);
+  spdlog::info("Project DawnViewer");
+
   DawnViewer::Window window;
   DawnViewer::Renderer renderer;
-
-  window.create("test", 512, 512);
+  window.create("test", INITIAL_WIDTH, INITIAL_HEIGHT);
 
   wgpu::Instance instance;
   wgpu::InstanceDescriptor instanceDesc{.capabilities = {.timedWaitAnyEnable = true}};
@@ -19,7 +26,7 @@ int main() {
     renderer.resize(w, h);
   });
 
-  renderer.init(instance, 512, 512);
+  renderer.init(instance, INITIAL_WIDTH, INITIAL_HEIGHT);
 
   while (true) {
     glfwPollEvents();
