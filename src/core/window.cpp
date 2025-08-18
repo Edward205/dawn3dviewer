@@ -1,6 +1,7 @@
 #include "core/window.hpp"
 
 #include "GLFW/glfw3.h"
+#include "components/mesh.hpp"
 #include "webgpu/webgpu_glfw.h"
 
 namespace DawnViewer {
@@ -28,14 +29,9 @@ void Window::onResize(std::function<void(int width, int height)> callback) {
 }
 
 void Window::shutdown() { glfwDestroyWindow(window); }
-void Window::createSurface(wgpu::Instance instance) {
-  if (!window || !instance) {
-    return;
-  }
-  surface = wgpu::glfw::CreateSurfaceForWindow(instance, window);
+wgpu::Surface Window::createSurface(wgpu::Instance instance) {
+  return wgpu::glfw::CreateSurfaceForWindow(instance, window);
 }
-wgpu::Surface Window::getSurface() {
-  return surface;
-}
+bool Window::shouldClose() { return glfwWindowShouldClose(window); }
 
 }  // namespace DawnViewer

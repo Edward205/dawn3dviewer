@@ -10,6 +10,8 @@
 #include "components/transform.hpp"
 #include "glm/ext/matrix_float4x4.hpp"
 #include "resources/mesh_loader.hpp"
+#include "spdlog/spdlog.h"
+
 namespace DawnViewer {
 void Renderer::initDevice(wgpu::Instance instance) {
   // Get adapter
@@ -30,6 +32,12 @@ void Renderer::initDevice(wgpu::Instance instance) {
       [](const wgpu::Device &, wgpu::ErrorType errorType, wgpu::StringView message) {
         std::cout << "Error: " << static_cast<int>(errorType)
                   << " - message: " << std::string(message) << "\n";
+      });
+  desc.SetDeviceLostCallback(
+      wgpu::CallbackMode::WaitAnyOnly,
+      [](const wgpu::Device &, wgpu::DeviceLostReason reason, wgpu::StringView message) {
+        spdlog::info("Device lost: reason {0}, message {1}", static_cast<int>(reason),
+                     std::string(message));
       });
 
   // Set device requirements
@@ -233,30 +241,29 @@ void Renderer::initPipeline() {
 
   wgpu::ShaderSourceWGSL wgsl{{.nextInChain = nullptr, .code = shaderCode}};
   wgpu::ShaderModuleDescriptor shaderModuleDesc{.nextInChain = &wgsl};
-  wgpu::ShaderModule shaderModule =
-      device.CreateShaderModule(&shaderModuleDesc);
+  wgpu::ShaderModule shaderModule = device.CreateShaderModule(&shaderModuleDesc);
 
   // Vertex Buffer Layout
   std::vector<wgpu::VertexAttribute> vertexAttribs(3);
   vertexAttribs[0] = {.format = wgpu::VertexFormat::Float32x3, .offset = 0, .shaderLocation = 0};
-  vertexAttribs[1] = {.format = wgpu::VertexFormat::Float32x3, .offset = 3 * sizeof(float), .shaderLocation = 1};
-  vertexAttribs[2] = {.format = wgpu::VertexFormat::Float32x3, .offset = 6 * sizeof(float), .shaderLocation = 2};
+  vertexAttribs[1] = {
+      .format = wgpu::VertexFormat::Float32x3, .offset = 3 * sizeof(float), .shaderLocation = 1};
+  vertexAttribs[2] = {
+      .format = wgpu::VertexFormat::Float32x3, .offset = 6 * sizeof(float), .shaderLocation = 2};
 
-  wgpu::VertexBufferLayout vertexBufferLayout{
-      .arrayStride = 9 * sizeof(float),
-      .attributeCount = vertexAttribs.size(),
-      .attributes = vertexAttribs.data()
-  };
+  wgpu::VertexBufferLayout vertexBufferLayout{.arrayStride = 9 * sizeof(float),
+                                              .attributeCount = vertexAttribs.size(),
+                                              .attributes = vertexAttribs.data()};
 
   // Depth Stencil State
   wgpu::DepthStencilState depthStencilState{
-      .format = wgpu::TextureFormat::Depth24Plus, // Must match initDepthBuffer
+      .format = wgpu::TextureFormat::Depth24Plus,  // Must match initDepthBuffer
       .depthWriteEnabled = true,
       .depthCompare = wgpu::CompareFunction::Less,
   };
-  
-  wgpu::ColorTargetState colorTarget{.format = this->format}; // Use class member format
-  
+
+  wgpu::ColorTargetState colorTarget{.format = this->format};  // Use class member format
+
   wgpu::FragmentState fragmentState{
       .module = shaderModule,
       .entryPoint = "fs_main",
@@ -266,7 +273,10 @@ void Renderer::initPipeline() {
 
   wgpu::RenderPipelineDescriptor descriptor{
       .layout = pipelineLayout,
-      .vertex = {.module = shaderModule, .entryPoint = "vs_main", .bufferCount = 1, .buffers = &vertexBufferLayout},
+      .vertex = {.module = shaderModule,
+                 .entryPoint = "vs_main",
+                 .bufferCount = 1,
+                 .buffers = &vertexBufferLayout},
       .primitive = {.topology = wgpu::PrimitiveTopology::TriangleList},
       .depthStencil = &depthStencilState,
       .fragment = &fragmentState,
@@ -285,7 +295,7 @@ void Renderer::init(wgpu::Instance instance, uint32_t w, uint32_t h) {
   initBindGroups();
   initDepthBuffer();
   initPipeline();
-  
+
   objectDataBuffer.resize(MAX_ENTITIES * DYNAMIC_BUFFER_ALIGNMENT);
 }
 
@@ -384,8 +394,7 @@ void Renderer::render(wgpu::Instance instance) {
   surface.Present();
   instance.ProcessEvents();
 }
-void Renderer::resize(uint32_t newWidth, uint32_t newHeight)
-{
+void Renderer::resize(uint32_t newWidth, uint32_t newHeight) {
   width = newWidth;
   height = newHeight;
   initSurface(surface);
@@ -393,15 +402,15 @@ void Renderer::resize(uint32_t newWidth, uint32_t newHeight)
 
   // recalculate SceneUniforms projection
   glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)width / height, 0.1f, 100.0f);
-  device.GetQueue().WriteBuffer(sceneUniformsBuffer, offsetof(SceneUniforms, projection), &projection, sizeof(projection));
+  device.GetQueue().WriteBuffer(sceneUniformsBuffer, offsetof(SceneUniforms, projection),
+                                &projection, sizeof(projection));
 }
-void Renderer::setSurface(wgpu::Surface newSurface) {
-  surface = newSurface;
-}
+void Renderer::setSurface(wgpu::Surface newSurface) { surface = newSurface; }
 void Renderer::shutdown() {
-  sceneUniformsBuffer.Destroy();
-  objectUniformsBuffer.Destroy();
-  depthTexture.Destroy();
+  surface.Unconfigure();
+  surface = {};
+  device = {};
+  adapter = {};
 }
 
 }  // namespace DawnViewer

@@ -7,15 +7,14 @@ namespace DawnViewer {
 class Window {
  public:
   void create(const char* title, int width, int height);
-  void createSurface(wgpu::Instance instance);
-  wgpu::Surface getSurface();
+  wgpu::Surface createSurface(wgpu::Instance instance);
   void onResize(std::function<void(int width, int height)> callback);
+  bool shouldClose();
   void shutdown();
 
  private:
   GLFWwindow* window;
   uint32_t width, height;
   std::function<void(int, int)> resizeCallback;
-  wgpu::Surface surface;
 };
 }  // namespace DawnViewer
