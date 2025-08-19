@@ -32,7 +32,7 @@ void Renderer::initDevice(wgpu::Instance instance) {
   desc.SetDeviceLostCallback(
       wgpu::CallbackMode::WaitAnyOnly,
       [](const wgpu::Device &, wgpu::DeviceLostReason reason, wgpu::StringView message) {
-        spdlog::info("Device lost: reason {0}, message {1}", static_cast<int>(reason),
+        spdlog::warn("Device lost: reason {0}, message {1}", static_cast<int>(reason),
                      std::string(message));
       });
 
