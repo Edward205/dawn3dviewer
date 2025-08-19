@@ -1,16 +1,15 @@
 #include <dawn/webgpu_cpp.h>
 
 #include <filesystem>
-#include <iostream>
 #include <string>
 #include <vector>
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "../tinyobjloader/include/tiny_obj_loader.hpp"
+#include "spdlog/spdlog.h"
 
 namespace DawnViewer {
-inline bool loadMeshFromObj(const std::filesystem::path& path,
-                            std::vector<float>& pointData) {
+inline bool loadMeshFromObj(const std::filesystem::path& path, std::vector<float>& pointData) {
   tinyobj::attrib_t attrib;
   std::vector<tinyobj::shape_t> shapes;
   std::vector<tinyobj::material_t> materials;
@@ -18,15 +17,14 @@ inline bool loadMeshFromObj(const std::filesystem::path& path,
   std::string warn;
   std::string err;
 
-  bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err,
-                              path.string().c_str());
+  bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, path.string().c_str());
 
   if (!warn.empty()) {
-    std::cout << warn << std::endl;
+    spdlog::warn("tinyobjloader: {0}", warn);
   }
 
   if (!err.empty()) {
-    std::cerr << err << std::endl;
+    spdlog::error("tinyobjloader: {0}", err);
   }
 
   if (!ret) {

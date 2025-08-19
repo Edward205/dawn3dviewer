@@ -1,8 +1,5 @@
 #include "core/renderer.hpp"
 
-#include <cstddef>
-#include <cstdint>
-#include <iostream>
 #include <string>
 
 #include "GLFW/glfw3.h"
@@ -19,7 +16,7 @@ void Renderer::initDevice(wgpu::Instance instance) {
       nullptr, wgpu::CallbackMode::WaitAnyOnly,
       [this](wgpu::RequestAdapterStatus status, wgpu::Adapter a, wgpu::StringView message) {
         if (status != wgpu::RequestAdapterStatus::Success) {
-          std::cout << "RequestAdapter: " << std::string(message) << "\n";
+          spdlog::error("RequestAdapter: {0}", std::string(message));
           exit(0);  // TODO better error handling
         }
         adapter = std::move(a);
@@ -28,11 +25,10 @@ void Renderer::initDevice(wgpu::Instance instance) {
   instance.WaitAny(f1, UINT64_MAX);
 
   wgpu::DeviceDescriptor desc{};
-  desc.SetUncapturedErrorCallback(
-      [](const wgpu::Device &, wgpu::ErrorType errorType, wgpu::StringView message) {
-        std::cout << "Error: " << static_cast<int>(errorType)
-                  << " - message: " << std::string(message) << "\n";
-      });
+  desc.SetUncapturedErrorCallback([](const wgpu::Device &, wgpu::ErrorType errorType,
+                                     wgpu::StringView message) {
+    spdlog::error("Error: {0} - message: {1}", static_cast<int>(errorType), std::string(message));
+  });
   desc.SetDeviceLostCallback(
       wgpu::CallbackMode::WaitAnyOnly,
       [](const wgpu::Device &, wgpu::DeviceLostReason reason, wgpu::StringView message) {
@@ -59,7 +55,7 @@ void Renderer::initDevice(wgpu::Instance instance) {
       &desc, wgpu::CallbackMode::WaitAnyOnly,
       [this](wgpu::RequestDeviceStatus status, wgpu::Device d, wgpu::StringView message) {
         if (status != wgpu::RequestDeviceStatus::Success) {
-          std::cout << "RequestDevice: " << std::string(message) << "\n";
+          spdlog::error("RequestDevice: {0}", std::string(message));
           exit(0);  // TODO better error handling
         }
         device = std::move(d);
