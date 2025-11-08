@@ -1,7 +1,6 @@
 #include "core/window.hpp"
 
 #include "GLFW/glfw3.h"
-#include "components/mesh.hpp"
 #include "webgpu/webgpu_glfw.h"
 
 namespace DawnViewer {

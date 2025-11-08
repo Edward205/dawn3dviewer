@@ -7,7 +7,7 @@
 namespace DawnViewer {
 class Renderer {
  public:
-  void init(wgpu::Instance instance, uint32_t w, uint32_t h);
+  void init(wgpu::Instance instance, uint32_t w, uint32_t h, char *model);
   void shutdown();
   void render(wgpu::Instance instance);
   void resize(uint32_t newWidth, uint32_t newHeight);
@@ -34,8 +34,7 @@ class Renderer {
   wgpu::TextureFormat format;
 
   DawnViewer::Scene scene;
-  entt::entity entity1;
-  entt::entity entity2;
+  entt::entity model;
 
   struct SceneUniforms {
     glm::mat4 view;
@@ -50,7 +49,7 @@ class Renderer {
 
   void initDevice(wgpu::Instance instance);
   void initSurface(wgpu::Surface surface);
-  void initScene(); // TODO: Scene* parameter
+  void initScene(std::string path); // TODO: Scene* parameter
   void initUniforms();
   void initBindGroups();
   void initDepthBuffer();

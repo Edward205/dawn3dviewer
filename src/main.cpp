@@ -5,13 +5,17 @@
 #define INITIAL_WIDTH 1280
 #define INITIAL_HEIGHT 720
 
-int main() {
+int main(int argc, char *argv[]) {
   spdlog::set_level(spdlog::level::debug);
-  spdlog::info("Project DawnViewer");
+  spdlog::info("DawnViewer");
+  
+  if(argc < 2)
+    spdlog::error("Missing model to open. Example: dawn3dviewer teapot.obj");
+  spdlog::info("Loading model: {0}", argv[1]);
 
   DawnViewer::Renderer renderer;
   DawnViewer::Window window;
-  window.create("test", INITIAL_WIDTH, INITIAL_HEIGHT);
+  window.create("Dawn Viewer", INITIAL_WIDTH, INITIAL_HEIGHT);
 
   wgpu::Instance instance;
   wgpu::InstanceDescriptor instanceDesc{.capabilities = {.timedWaitAnyEnable = true}};
@@ -22,7 +26,7 @@ int main() {
 
   window.onResize([&renderer](int w, int h) { renderer.resize(w, h); });
 
-  renderer.init(instance, INITIAL_WIDTH, INITIAL_HEIGHT);
+  renderer.init(instance, INITIAL_WIDTH, INITIAL_HEIGHT, argv[1]);
 
   while (!window.shouldClose()) {
     glfwPollEvents();

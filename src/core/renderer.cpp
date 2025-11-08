@@ -75,19 +75,12 @@ void Renderer::initSurface(wgpu::Surface surface) {
                                     .presentMode = wgpu::PresentMode::Fifo};
   surface.Configure(&config);
 }
-void Renderer::initScene() {
-  /*entity1 = scene.createEntity();
+void Renderer::initScene(std::string path) {
+  model = scene.createEntity();
   std::vector<float> *pointData = new std::vector<float>;
-  DawnViewer::loadMeshFromObj("res/mammoth.obj", *pointData);
-  scene.addComponent<DawnViewer::MeshComponent>(entity1, *pointData, device);
-  scene.addComponent<DawnViewer::TransformComponent>(entity1, glm::vec3(0, 0, 0), glm::vec3(0, 0, 0),
-                                                glm::vec3(1));
-*/
-  entity2 = scene.createEntity();
-  std::vector<float> *pointData1 = new std::vector<float>;
-  DawnViewer::loadMeshFromObj("res/teapot.obj", *pointData1);
-  scene.addComponent<DawnViewer::MeshComponent>(entity2, *pointData1, device);
-  scene.addComponent<DawnViewer::TransformComponent>(entity2, glm::vec3(0, 0, 0), glm::vec3(0, 0, 0),
+  DawnViewer::loadMeshFromObj(path, *pointData);
+  scene.addComponent<DawnViewer::MeshComponent>(model, *pointData, device);
+  scene.addComponent<DawnViewer::TransformComponent>(model, glm::vec3(0, 0, 0), glm::vec3(0, 0, 0),
                                                 glm::vec3(1));
 }
 void Renderer::initUniforms() {
@@ -280,13 +273,13 @@ void Renderer::initPipeline() {
   pipeline = device.CreateRenderPipeline(&descriptor);
 }
 
-void Renderer::init(wgpu::Instance instance, uint32_t w, uint32_t h) {
+void Renderer::init(wgpu::Instance instance, uint32_t w, uint32_t h, char *model) {
   width = w;
   height = h;
   initDevice(instance);
   initSurface(surface);
 
-  initScene();
+  initScene(std::string(model));
   initUniforms();
   initBindGroups();
   initDepthBuffer();
@@ -306,24 +299,14 @@ void Renderer::render(wgpu::Instance instance) {
   const float rotationSpeed = 0.02f;
 
   auto view = scene.viewComponents<DawnViewer::TransformComponent>();
-  int a = 2;
   for (auto entity : view) {
     auto &transform = view.get<DawnViewer::TransformComponent>(entity);
 
     glm::vec3 upAxis;
-    if (a % 2 == 0)
-      upAxis = glm::vec3(1.0f, 0.0f, 1.0f);
-    else
-      upAxis = glm::vec3(1.0f, 5.0f, 0.0f);
+    upAxis = glm::vec3(1.0f, 0.0f, 1.0f);
     glm::quat rotationDelta = glm::angleAxis(rotationSpeed, upAxis);
-
-    // Apply the new rotation by multiplying with the existing one
-    // The order matters: this applies the rotation in the object's local space
     transform.rotation = transform.rotation * rotationDelta;
-
-    // Normalize to prevent floating point drift over time
     transform.rotation = glm::normalize(transform.rotation);
-    ++a;
   }
 
   // update object uniforms
