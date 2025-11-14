@@ -9,8 +9,11 @@ int main(int argc, char *argv[]) {
   spdlog::set_level(spdlog::level::debug);
   spdlog::info("DawnViewer");
   
-  if(argc < 2)
+  if (argc < 2)
+  {
     spdlog::error("Missing model to open. Example: dawn3dviewer teapot.obj");
+    return 1;
+  }
   spdlog::info("Loading model: {0}", argv[1]);
 
   DawnViewer::Renderer renderer;
